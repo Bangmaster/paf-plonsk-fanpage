@@ -1,0 +1,166 @@
+import { useState } from 'react'
+import { useAuth } from '../context/AuthContext.jsx'
+import { useNavigate } from 'react-router-dom'
+
+export default function LoginPage() {
+  const { isAdmin, login, logout, changePassword } = useAuth()
+  const navigate = useNavigate()
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [oldPass, setOldPass] = useState('')
+  const [newPass, setNewPass] = useState('')
+  const [confirmPass, setConfirmPass] = useState('')
+  const [passMsg, setPassMsg] = useState('')
+
+  function handleLogin() {
+    const ok = login(username, password)
+    if (ok) {
+      navigate('/')
+    } else {
+      setError('Błędny login lub hasło.')
+    }
+  }
+
+  function handleChangePassword() {
+    if (newPass !== confirmPass) { setPassMsg('Hasła nie są identyczne.'); return }
+    if (newPass.length < 4) { setPassMsg('Hasło za krótkie (min. 4 znaki).'); return }
+    const ok = changePassword(oldPass, newPass)
+    if (ok) {
+      setPassMsg('Hasło zostało zmienione!')
+      setOldPass(''); setNewPass(''); setConfirmPass('')
+    } else {
+      setPassMsg('Stare hasło jest nieprawidłowe.')
+    }
+  }
+
+  const inputStyle = {
+    background: '#1e1e1e',
+    border: '1px solid #2a2a2a',
+    color: 'var(--white)',
+    padding: '12px 16px',
+    fontSize: 16,
+    width: '100%',
+    outline: 'none',
+    fontFamily: 'var(--font-body)',
+    transition: 'border-color 0.2s',
+  }
+
+  const labelStyle = {
+    fontFamily: 'var(--font-condensed)',
+    fontSize: 12,
+    letterSpacing: 2,
+    color: 'var(--white-muted)',
+    textTransform: 'uppercase',
+    display: 'block',
+    marginBottom: 8,
+  }
+
+  if (isAdmin) {
+    return (
+      <div style={{ maxWidth: 480, margin: '80px auto', padding: '0 20px' }} className="fade-in">
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          <img src="/logo.png" alt="PAF" style={{ height: 80, marginBottom: 16 }} />
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: 3 }}>Panel Admina</h1>
+        </div>
+
+        <div className="card" style={{ padding: 28, marginBottom: 16, borderLeft: '4px solid #4ade80' }}>
+          <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, letterSpacing: 2, color: '#4ade80', textTransform: 'uppercase', marginBottom: 8 }}>
+            ✓ Zalogowany jako Admin
+          </div>
+          <p style={{ fontFamily: 'var(--font-condensed)', color: 'var(--white-muted)', fontSize: 14 }}>
+            Masz dostęp do edycji danych w całej aplikacji.
+          </p>
+          <button className="btn-danger" style={{ marginTop: 16 }} onClick={logout}>
+            Wyloguj się
+          </button>
+        </div>
+
+        {/* Change password */}
+        <div className="card" style={{ padding: 28 }}>
+          <div
+            style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', color: 'var(--white-muted)', display: 'flex', justifyContent: 'space-between' }}
+            onClick={() => setChangingPassword(!changingPassword)}
+          >
+            Zmień hasło {changingPassword ? '▲' : '▼'}
+          </div>
+          {changingPassword && (
+            <div style={{ marginTop: 20 }}>
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>Stare hasło</label>
+                <input style={inputStyle} type="password" value={oldPass} onChange={e => setOldPass(e.target.value)} />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={labelStyle}>Nowe hasło</label>
+                <input style={inputStyle} type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
+              </div>
+              <div style={{ marginBottom: 20 }}>
+                <label style={labelStyle}>Potwierdź nowe hasło</label>
+                <input style={inputStyle} type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
+              </div>
+              {passMsg && (
+                <div style={{
+                  fontFamily: 'var(--font-condensed)',
+                  fontSize: 13,
+                  color: passMsg.includes('zmienione') ? '#4ade80' : 'var(--red-light)',
+                  marginBottom: 14,
+                }}>
+                  {passMsg}
+                </div>
+              )}
+              <button className="btn-gold" onClick={handleChangePassword}>Zmień hasło</button>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth: 420, margin: '80px auto', padding: '0 20px' }} className="fade-in">
+      <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <img src="/logo.png" alt="PAF" style={{ height: 80, marginBottom: 16 }} />
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: 3 }}>Logowanie</h1>
+        <div style={{ width: 40, height: 3, background: 'var(--red)', margin: '12px auto 0' }} />
+      </div>
+
+      <div className="card" style={{ padding: 32 }}>
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelStyle}>Login</label>
+          <input
+            style={inputStyle}
+            value={username}
+            onChange={e => setUsername(e.target.value)}
+            onFocus={e => e.target.style.borderColor = 'var(--red)'}
+            onBlur={e => e.target.style.borderColor = '#2a2a2a'}
+            placeholder="Login"
+            autoComplete="username"
+          />
+        </div>
+        <div style={{ marginBottom: 24 }}>
+          <label style={labelStyle}>Hasło</label>
+          <input
+            style={inputStyle}
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onFocus={e => e.target.style.borderColor = 'var(--red)'}
+            onBlur={e => e.target.style.borderColor = '#2a2a2a'}
+            onKeyDown={e => e.key === 'Enter' && handleLogin()}
+            placeholder="Hasło"
+            autoComplete="current-password"
+          />
+        </div>
+        {error && (
+          <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--red-light)', marginBottom: 16 }}>
+            {error}
+          </div>
+        )}
+        <button className="btn-primary" style={{ width: '100%', padding: '14px', fontSize: 16 }} onClick={handleLogin}>
+          Zaloguj się
+        </button>
+      </div>
+    </div>
+  )
+}
