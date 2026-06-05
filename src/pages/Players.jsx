@@ -9,13 +9,16 @@ export default function Players() {
   const [showForm, setShowForm] = useState(false)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const [shirtNumber, setShirtNumber] = useState('')
   const [saving, setSaving] = useState(false)
   const [selectedPlayer, setSelectedPlayer] = useState(null)
   const [playerStats, setPlayerStats] = useState(null)
   const [statsLoading, setStatsLoading] = useState(false)
+  const [editingPlayer, setEditingPlayer] = useState(null)
+  const [editForm, setEditForm] = useState({ first_name: '', last_name: '', shirt_number: '' })
 
   async function loadPlayers() {
-    const { data } = await supabase.from('players').select('*').order('last_name')
+    const { data } = await supabase.from('players').select('*').order('shirt_number', { ascending: true, nullsFirst: false })
     setPlayers(data || [])
     setLoading(false)
   }
@@ -25,10 +28,28 @@ export default function Players() {
   async function addPlayer() {
     if (!firstName.trim() || !lastName.trim()) return
     setSaving(true)
-    await supabase.from('players').insert({ first_name: firstName.trim(), last_name: lastName.trim() })
+    await supabase.from('players').insert({
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
+      shirt_number: shirtNumber ? parseInt(shirtNumber) : null,
+    })
     setFirstName('')
     setLastName('')
+    setShirtNumber('')
     setShowForm(false)
+    await loadPlayers()
+    setSaving(false)
+  }
+
+  async function saveEdit() {
+    if (!editForm.first_name.trim() || !editForm.last_name.trim()) return
+    setSaving(true)
+    await supabase.from('players').update({
+      first_name: editForm.first_name.trim(),
+      last_name: editForm.last_name.trim(),
+      shirt_number: editForm.shirt_number ? parseInt(editForm.shirt_number) : null,
+    }).eq('id', editingPlayer)
+    setEditingPlayer(null)
     await loadPlayers()
     setSaving(false)
   }
@@ -81,6 +102,8 @@ export default function Players() {
 
   function PlayerCard({ player }) {
     const isSelected = selectedPlayer?.id === player.id
+    const isEditing = editingPlayer === player.id
+
     return (
       <div>
         <div
@@ -90,35 +113,105 @@ export default function Players() {
             display: 'flex',
             alignItems: 'center',
             gap: 12,
-            cursor: 'pointer',
             borderLeft: isSelected ? '3px solid var(--gold)' : '3px solid transparent',
             transition: 'all 0.2s',
           }}
-          onClick={() => openPlayer(player)}
-          onMouseEnter={e => { if (!isSelected) e.currentTarget.style.borderLeftColor = 'var(--red)' }}
-          onMouseLeave={e => { if (!isSelected) e.currentTarget.style.borderLeftColor = 'transparent' }}
         >
+          {/* Numer koszulki */}
           <div style={{
-            width: 40, height: 40,
+            width: 44, height: 44,
             background: player.active ? 'var(--red)' : 'var(--black-border)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'var(--font-display)', fontSize: 16, color: 'var(--white)',
+            fontFamily: 'var(--font-display)',
+            fontSize: player.shirt_number ? 20 : 14,
+            color: 'var(--white)',
             flexShrink: 0,
-          }}>
-            {player.first_name[0]}{player.last_name[0]}
+            cursor: 'pointer',
+          }}
+            onClick={() => openPlayer(player)}
+          >
+            {player.shirt_number || `${player.first_name[0]}${player.last_name[0]}`}
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 16, fontWeight: 700 }}>
-              {player.first_name} {player.last_name}
+
+          {isEditing ? (
+            /* Tryb edycji */
+            <div style={{ flex: 1, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                className="input-field"
+                value={editForm.first_name}
+                onChange={e => setEditForm({ ...editForm, first_name: e.target.value })}
+                placeholder="Imię"
+                style={{ width: 120, padding: '6px 10px', fontSize: 14 }}
+              />
+              <input
+                className="input-field"
+                value={editForm.last_name}
+                onChange={e => setEditForm({ ...editForm, last_name: e.target.value })}
+                placeholder="Nazwisko"
+                style={{ width: 140, padding: '6px 10px', fontSize: 14 }}
+              />
+              <input
+                className="input-field"
+                type="number"
+                value={editForm.shirt_number}
+                onChange={e => setEditForm({ ...editForm, shirt_number: e.target.value })}
+                placeholder="Nr"
+                style={{ width: 70, padding: '6px 10px', fontSize: 14 }}
+              />
+              <button className="btn-gold" style={{ padding: '6px 14px', fontSize: 13 }} onClick={saveEdit} disabled={saving}>
+                {saving ? '...' : 'Zapisz'}
+              </button>
+              <button className="btn-ghost" style={{ padding: '6px 12px', fontSize: 13 }} onClick={() => setEditingPlayer(null)}>
+                Anuluj
+              </button>
             </div>
-            {!player.active && (
-              <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--white-muted)', letterSpacing: 1 }}>
-                NIEAKTYWNY
+          ) : (
+            /* Tryb widoku */
+            <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => openPlayer(player)}>
+              <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 16, fontWeight: 700 }}>
+                {player.first_name} {player.last_name}
+                {player.shirt_number && (
+                  <span style={{ marginLeft: 8, fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', fontWeight: 400 }}>
+                    #{player.shirt_number}
+                  </span>
+                )}
               </div>
-            )}
-          </div>
-          {isAdmin && (
-            <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+              {!player.active && (
+                <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--white-muted)', letterSpacing: 1 }}>
+                  NIEAKTYWNY
+                </div>
+              )}
+            </div>
+          )}
+
+          {isAdmin && !isEditing && (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                style={{
+                  fontFamily: 'var(--font-condensed)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  textTransform: 'uppercase',
+                  padding: '5px 10px',
+                  background: 'transparent',
+                  border: '1px solid #333',
+                  color: 'var(--white-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onClick={() => {
+                  setEditingPlayer(player.id)
+                  setEditForm({
+                    first_name: player.first_name,
+                    last_name: player.last_name,
+                    shirt_number: player.shirt_number || '',
+                  })
+                  setSelectedPlayer(null)
+                }}
+              >
+                ✏️ Edytuj
+              </button>
               <button
                 style={{
                   fontFamily: 'var(--font-condensed)',
@@ -145,7 +238,7 @@ export default function Players() {
         </div>
 
         {/* Stats panel */}
-        {isSelected && (
+        {isSelected && !isEditing && (
           <div style={{
             background: '#141414',
             border: '1px solid var(--black-border)',
@@ -155,14 +248,12 @@ export default function Players() {
             {statsLoading ? (
               <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)' }}>Ładowanie...</div>
             ) : playerStats ? (
-              <div>
-                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 16 }}>
-                  <StatBox label="Mecze" value={playerStats.matchPlayers.length} />
-                  <StatBox label="Minuty" value={playerStats.totalMinutes + "'"} />
-                  <StatBox label="Gole" value={playerStats.goals.length} color="var(--gold)" />
-                  <StatBox label="Żółte" value={playerStats.yellowCards} color="#facc15" />
-                  <StatBox label="Czerwone" value={playerStats.redCards} color="var(--red-light)" />
-                </div>
+              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                <StatBox label="Mecze" value={playerStats.matchPlayers.length} />
+                <StatBox label="Minuty" value={playerStats.totalMinutes + "'"} />
+                <StatBox label="Gole" value={playerStats.goals.length} color="var(--gold)" />
+                <StatBox label="Żółte" value={playerStats.yellowCards} color="#facc15" />
+                <StatBox label="Czerwone" value={playerStats.redCards} color="var(--red-light)" />
               </div>
             ) : null}
           </div>
@@ -192,13 +283,17 @@ export default function Players() {
             Nowy zawodnik
           </h3>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 160 }}>
-              <label style={labelStyle}>Imię</label>
+            <div style={{ flex: 1, minWidth: 140 }}>
+              <label style={labelStyle}>Imię *</label>
               <input className="input-field" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="Imię" />
             </div>
             <div style={{ flex: 1, minWidth: 160 }}>
-              <label style={labelStyle}>Nazwisko</label>
-              <input className="input-field" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Nazwisko"
+              <label style={labelStyle}>Nazwisko *</label>
+              <input className="input-field" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Nazwisko" />
+            </div>
+            <div style={{ width: 100 }}>
+              <label style={labelStyle}>Nr koszulki</label>
+              <input className="input-field" type="number" value={shirtNumber} onChange={e => setShirtNumber(e.target.value)} placeholder="Nr"
                 onKeyDown={e => e.key === 'Enter' && addPlayer()} />
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
