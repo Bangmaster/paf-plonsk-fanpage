@@ -12,7 +12,10 @@ export default function Navbar() {
     { to: '/terminarz', label: 'Terminarz' },
     { to: '/zawodnicy', label: 'Zawodnicy' },
     { to: '/podsumowanie', label: 'Podsumowanie' },
-    ...(isAdmin ? [{ to: '/admin', label: 'Panel Admina' }] : []),
+    ...(isAdmin ? [
+      { to: '/admin', label: 'Panel Admina' },
+      { to: '/backup', label: 'Backup' },
+    ] : []),
   ]
 
   return (

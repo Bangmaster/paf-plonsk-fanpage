@@ -6,6 +6,7 @@ import MatchDetail from './pages/MatchDetail.jsx'
 import Players from './pages/Players.jsx'
 import Summary from './pages/Summary.jsx'
 import LoginPage from './pages/LoginPage.jsx'
+import Backup from './pages/Backup.jsx'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/zawodnicy" element={<Players />} />
           <Route path="/podsumowanie" element={<Summary />} />
           <Route path="/admin" element={<LoginPage />} />
+          <Route path="/backup" element={<Backup />} />
         </Routes>
       </main>
       <footer style={{
