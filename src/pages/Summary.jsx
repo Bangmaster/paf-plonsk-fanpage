@@ -12,18 +12,16 @@ export default function Summary() {
       const [{ data: matches }, { data: goals }, { data: cards }, { data: matchPlayers }] = await Promise.all([
         supabase.from('matches').select('*').eq('status', 'played'),
         supabase.from('goals').select('*, players(first_name, last_name), matches(competition)'),
-        supabase.from('cards').select('*, players(first_name, last_name)'),
+        supabase.from('cards').select('*, players(first_name, last_name), matches(competition)'),
         supabase.from('match_players').select('*, players(first_name, last_name), matches(status)'),
       ])
 
-      // Team stats
       const played = matches || []
       let wins = 0, draws = 0, losses = 0, goalsFor = 0, goalsAgainst = 0
       played.forEach(m => {
         if (m.score_us === null) return
         goalsFor += m.score_us
         goalsAgainst += m.score_them
-        // Dla pucharu wynik końcowy = karne/dogrywka jeśli były
         const usF = m.score_us_extra !== null && m.score_us_extra !== undefined ? m.score_us_extra : m.score_us
         const themF = m.score_them_extra !== null && m.score_them_extra !== undefined ? m.score_them_extra : m.score_them
         if (usF > themF) wins++
@@ -33,20 +31,19 @@ export default function Summary() {
 
       setTeamStats({ played: played.length, wins, draws, losses, goalsFor, goalsAgainst })
 
-      // Player stats
       const stats = {}
 
       ;(matchPlayers || []).filter(mp => mp.matches?.status === 'played').forEach(mp => {
         const pid = mp.player_id
         const name = mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : '?'
-        if (!stats[pid]) stats[pid] = { name, goals: 0, goals_liga: 0, goals_puchar: 0, minutes: 0, yellow: 0, red: 0 }
+        if (!stats[pid]) stats[pid] = { name, goals: 0, goals_liga: 0, goals_puchar: 0, minutes: 0, yellow: 0, yellow_liga: 0, yellow_puchar: 0, red: 0, red_liga: 0, red_puchar: 0 }
         stats[pid].minutes += mp.minutes_played || 0
       })
 
       ;(goals || []).forEach(g => {
         const pid = g.player_id
         const name = g.players ? `${g.players.first_name} ${g.players.last_name}` : '?'
-        if (!stats[pid]) stats[pid] = { name, goals: 0, goals_liga: 0, goals_puchar: 0, minutes: 0, yellow: 0, red: 0 }
+        if (!stats[pid]) stats[pid] = { name, goals: 0, goals_liga: 0, goals_puchar: 0, minutes: 0, yellow: 0, yellow_liga: 0, yellow_puchar: 0, red: 0, red_liga: 0, red_puchar: 0 }
         stats[pid].goals++
         if (g.matches?.competition === 'puchar') stats[pid].goals_puchar++
         else stats[pid].goals_liga++
@@ -55,9 +52,18 @@ export default function Summary() {
       ;(cards || []).forEach(c => {
         const pid = c.player_id
         const name = c.players ? `${c.players.first_name} ${c.players.last_name}` : '?'
-        if (!stats[pid]) stats[pid] = { name, goals: 0, goals_liga: 0, goals_puchar: 0, minutes: 0, yellow: 0, red: 0 }
-        if (c.card_type === 'yellow' || c.card_type === 'double_yellow') stats[pid].yellow++
-        if (c.card_type === 'red' || c.card_type === 'double_yellow') stats[pid].red++
+        if (!stats[pid]) stats[pid] = { name, goals: 0, goals_liga: 0, goals_puchar: 0, minutes: 0, yellow: 0, yellow_liga: 0, yellow_puchar: 0, red: 0, red_liga: 0, red_puchar: 0 }
+        const isPuchar = c.matches?.competition === 'puchar'
+        if (c.card_type === 'yellow' || c.card_type === 'double_yellow') {
+          stats[pid].yellow++
+          if (isPuchar) stats[pid].yellow_puchar++
+          else stats[pid].yellow_liga++
+        }
+        if (c.card_type === 'red' || c.card_type === 'double_yellow') {
+          stats[pid].red++
+          if (isPuchar) stats[pid].red_puchar++
+          else stats[pid].red_liga++
+        }
       })
 
       setPlayerStats(Object.entries(stats).map(([id, s]) => ({ id, ...s })))
@@ -73,13 +79,23 @@ export default function Summary() {
   }
 
   const tabStyle = (t) => ({
-    fontFamily: 'var(--font-condensed)',
-    fontSize: 14, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase',
-    padding: '8px 20px', border: 'none', cursor: 'pointer',
+    fontFamily: 'var(--font-condensed)', fontSize: 14, fontWeight: 700,
+    letterSpacing: 1.5, textTransform: 'uppercase', padding: '8px 20px',
+    border: 'none', cursor: 'pointer',
     background: tab === t ? 'var(--red)' : 'var(--black-card)',
     color: tab === t ? 'var(--white)' : 'var(--white-muted)',
     transition: 'all 0.2s',
   })
+
+  const colHeader = (label, color) => (
+    <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 1, color, textTransform: 'uppercase', textAlign: 'center' }}>{label}</div>
+  )
+
+  const gridCols = {
+    goals: '44px 1fr 70px 70px 70px',
+    minutes: '44px 1fr 80px',
+    cards: '44px 1fr 65px 65px 65px 65px',
+  }
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '48px 20px' }} className="fade-in">
@@ -90,7 +106,6 @@ export default function Summary() {
         <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>Ładowanie...</div>
       ) : (
         <>
-          {/* Team stats */}
           {teamStats && (
             <div style={{ marginBottom: 40 }}>
               <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, letterSpacing: 3, color: 'var(--gold)', textTransform: 'uppercase', marginBottom: 16 }}>
@@ -112,7 +127,6 @@ export default function Summary() {
             </div>
           )}
 
-          {/* Tabs */}
           <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, letterSpacing: 3, color: 'var(--gold)', textTransform: 'uppercase', marginBottom: 16 }}>
             Rankingi zawodników
           </div>
@@ -122,32 +136,22 @@ export default function Summary() {
             <button style={tabStyle('cards')} onClick={() => setTab('cards')}>🟡 Kartki</button>
           </div>
 
-          {/* Ranking table */}
-          <div className="card">
+          <div className="card" style={{ overflow: 'auto' }}>
             {/* Header */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: tab === 'goals'
-                ? '44px 1fr 70px 70px 70px'
-                : tab === 'cards'
-                ? '44px 1fr 80px 80px'
-                : '44px 1fr 80px',
-              borderBottom: '1px solid var(--black-border)',
-              padding: '10px 16px', gap: 4,
-            }}>
-              <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase' }}>#</div>
-              <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase' }}>Zawodnik</div>
+            <div style={{ display: 'grid', gridTemplateColumns: gridCols[tab], borderBottom: '1px solid var(--black-border)', padding: '10px 16px', gap: 4, minWidth: tab === 'cards' ? 500 : 'auto' }}>
+              {colHeader('#', 'var(--white-muted)')}
+              {colHeader('Zawodnik', 'var(--white-muted)')}
               {tab === 'goals' && <>
-                <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 1, color: 'var(--gold)', textTransform: 'uppercase', textAlign: 'center' }}>Łącznie</div>
-                <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 1, color: 'var(--red-light)', textTransform: 'uppercase', textAlign: 'center' }}>Liga</div>
-                <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 1, color: '#facc15', textTransform: 'uppercase', textAlign: 'center' }}>Puchar</div>
+                {colHeader('Łącznie', 'var(--gold)')}
+                {colHeader('Liga', 'var(--red-light)')}
+                {colHeader('Puchar', '#facc15')}
               </>}
-              {tab === 'minutes' && (
-                <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--gold)', textTransform: 'uppercase', textAlign: 'center' }}>Min</div>
-              )}
+              {tab === 'minutes' && colHeader('Min', 'var(--gold)')}
               {tab === 'cards' && <>
-                <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: '#facc15', textTransform: 'uppercase', textAlign: 'center' }}>🟡</div>
-                <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--red-light)', textTransform: 'uppercase', textAlign: 'center' }}>🔴</div>
+                {colHeader('🟡 Łącznie', '#facc15')}
+                {colHeader('🟡 Liga', '#facc15')}
+                {colHeader('🟡 Puchar', '#facc15')}
+                {colHeader('🔴 Łącznie', 'var(--red-light)')}
               </>}
             </div>
 
@@ -157,16 +161,11 @@ export default function Summary() {
               const isTop = i === 0
               return (
                 <div key={p.id} style={{
-                  display: 'grid',
-                  gridTemplateColumns: tab === 'goals'
-                    ? '44px 1fr 70px 70px 70px'
-                    : tab === 'cards'
-                    ? '44px 1fr 80px 80px'
-                    : '44px 1fr 80px',
-                  padding: '12px 16px',
-                  borderBottom: '1px solid var(--black-border)',
+                  display: 'grid', gridTemplateColumns: gridCols[tab],
+                  padding: '12px 16px', borderBottom: '1px solid var(--black-border)',
                   background: isTop ? '#1a1200' : 'transparent',
                   alignItems: 'center', gap: 4,
+                  minWidth: tab === 'cards' ? 500 : 'auto',
                   transition: 'background 0.2s',
                 }}
                   onMouseEnter={e => { if (!isTop) e.currentTarget.style.background = '#161616' }}
@@ -181,40 +180,47 @@ export default function Summary() {
                   </div>
 
                   {tab === 'goals' && <>
-                    {/* Łącznie */}
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: isTop ? 28 : 22, color: isTop ? 'var(--gold)' : 'var(--white)', textAlign: 'center' }}>
-                      {p.goals}
-                    </div>
-                    {/* Liga */}
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: isTop ? 28 : 22, color: isTop ? 'var(--gold)' : 'var(--white)', textAlign: 'center' }}>{p.goals}</div>
                     <div style={{ textAlign: 'center' }}>
-                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--white-dim)' }}>{p.goals_liga}</span>
-                      {p.goals_liga > 0 && (
-                        <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 10, color: 'var(--red-light)', letterSpacing: 1 }}>liga</div>
-                      )}
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--white-dim)' }}>{p.goals_liga}</div>
+                      {p.goals_liga > 0 && <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 10, color: 'var(--red-light)', letterSpacing: 1 }}>liga</div>}
                     </div>
-                    {/* Puchar */}
                     <div style={{ textAlign: 'center' }}>
-                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: p.goals_puchar > 0 ? '#facc15' : 'var(--white-muted)' }}>{p.goals_puchar}</span>
-                      {p.goals_puchar > 0 && (
-                        <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 10, color: '#facc15', letterSpacing: 1 }}>puchar</div>
-                      )}
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: p.goals_puchar > 0 ? '#facc15' : 'var(--white-muted)' }}>{p.goals_puchar}</div>
+                      {p.goals_puchar > 0 && <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 10, color: '#facc15', letterSpacing: 1 }}>puchar</div>}
                     </div>
                   </>}
 
                   {tab === 'minutes' && (
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: isTop ? 28 : 22, color: isTop ? 'var(--gold)' : 'var(--white)', textAlign: 'center' }}>
-                      {p.minutes}'
-                    </div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: isTop ? 28 : 22, color: isTop ? 'var(--gold)' : 'var(--white)', textAlign: 'center' }}>{p.minutes}'</div>
                   )}
 
                   {tab === 'cards' && <>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: '#facc15', textAlign: 'center' }}>{p.yellow}</div>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--red-light)', textAlign: 'center' }}>{p.red}</div>
+                    {/* Żółte łącznie */}
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: isTop ? 26 : 20, color: '#facc15', textAlign: 'center' }}>{p.yellow}</div>
+                    {/* Żółte liga */}
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: p.yellow_liga > 0 ? '#facc15' : 'var(--white-muted)' }}>{p.yellow_liga}</div>
+                      {p.yellow_liga > 0 && <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 10, color: 'var(--white-muted)', letterSpacing: 1 }}>liga</div>}
+                    </div>
+                    {/* Żółte puchar */}
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, color: p.yellow_puchar > 0 ? '#facc15' : 'var(--white-muted)' }}>{p.yellow_puchar}</div>
+                      {p.yellow_puchar > 0 && <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 10, color: 'var(--white-muted)', letterSpacing: 1 }}>puchar</div>}
+                    </div>
+                    {/* Czerwone łącznie */}
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: isTop ? 26 : 20, color: p.red > 0 ? 'var(--red-light)' : 'var(--white-muted)', textAlign: 'center' }}>{p.red}</div>
                   </>}
                 </div>
               )
             })}
           </div>
+
+          {tab === 'cards' && (
+            <div style={{ marginTop: 12, fontFamily: 'var(--font-condensed)', fontSize: 12, color: 'var(--white-muted)', letterSpacing: 1 }}>
+              🔴 Czerwone kartki — podział liga/puchar dostępny po najechaniu na zawodnika
+            </div>
+          )}
         </>
       )}
     </div>
