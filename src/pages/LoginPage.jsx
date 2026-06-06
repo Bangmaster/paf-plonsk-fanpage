@@ -34,7 +34,7 @@ export default function LoginPage() {
 
   async function handleEndSeason() {
     if (!seasonName.trim()) { setEndMsg({ type: 'error', text: 'Wpisz nazwę sezonu!' }); return }
-    if (!confirm(`Czy na pewno chcesz zakończyć sezon "${seasonName}"? Wszystkie mecze i tabela zostaną przeniesione do Historii.`)) return
+    if (!confirm(`Czy na pewno chcesz zakończyć sezon "${seasonName}"? Wszystkie mecze, tabela i statystyki graczy zostaną przeniesione do Historii.`)) return
 
     setEndingSeason(true)
     setEndMsg(null)
@@ -46,19 +46,68 @@ export default function LoginPage() {
         .insert({ name: seasonName.trim() })
         .select()
         .single()
-
       if (seasonError) throw seasonError
 
-      // 2. Przypisz mecze do sezonu
-      await supabase.from('matches').update({ season_id: season.id }).is('season_id', null)
+      // 2. Pobierz wszystkie dane do statystyk
+      const [{ data: goals }, { data: cards }, { data: matchPlayers }, { data: players }] = await Promise.all([
+        supabase.from('goals').select('*, players(first_name, last_name), matches(competition, season_id)').is('matches.season_id', null),
+        supabase.from('cards').select('*, players(first_name, last_name), matches(competition, season_id)').is('matches.season_id', null),
+        supabase.from('match_players').select('*, players(first_name, last_name), matches(status, season_id)').is('matches.season_id', null),
+        supabase.from('players').select('*'),
+      ])
 
-      // 3. Przypisz tabelę do sezonu
+      // 3. Oblicz statystyki per gracz
+      const stats = {}
+
+      ;(matchPlayers || []).filter(mp => mp.matches?.status === 'played').forEach(mp => {
+        const pid = mp.player_id
+        const name = mp.players ? `${mp.players.first_name} ${mp.players.last_name}` : '?'
+        if (!stats[pid]) stats[pid] = { player_id: pid, player_name: name, goals: 0, goals_liga: 0, goals_puchar: 0, minutes: 0, yellow_cards: 0, yellow_liga: 0, yellow_puchar: 0, red_cards: 0, red_liga: 0, red_puchar: 0, matches_played: 0 }
+        stats[pid].minutes += mp.minutes_played || 0
+        stats[pid].matches_played++
+      })
+
+      ;(goals || []).forEach(g => {
+        const pid = g.player_id
+        const name = g.players ? `${g.players.first_name} ${g.players.last_name}` : '?'
+        if (!stats[pid]) stats[pid] = { player_id: pid, player_name: name, goals: 0, goals_liga: 0, goals_puchar: 0, minutes: 0, yellow_cards: 0, yellow_liga: 0, yellow_puchar: 0, red_cards: 0, red_liga: 0, red_puchar: 0, matches_played: 0 }
+        stats[pid].goals++
+        if (g.matches?.competition === 'puchar') stats[pid].goals_puchar++
+        else stats[pid].goals_liga++
+      })
+
+      ;(cards || []).forEach(c => {
+        const pid = c.player_id
+        const name = c.players ? `${c.players.first_name} ${c.players.last_name}` : '?'
+        if (!stats[pid]) stats[pid] = { player_id: pid, player_name: name, goals: 0, goals_liga: 0, goals_puchar: 0, minutes: 0, yellow_cards: 0, yellow_liga: 0, yellow_puchar: 0, red_cards: 0, red_liga: 0, red_puchar: 0, matches_played: 0 }
+        const isPuchar = c.matches?.competition === 'puchar'
+        if (c.card_type === 'yellow' || c.card_type === 'double_yellow') {
+          stats[pid].yellow_cards++
+          if (isPuchar) stats[pid].yellow_puchar++
+          else stats[pid].yellow_liga++
+        }
+        if (c.card_type === 'red' || c.card_type === 'double_yellow') {
+          stats[pid].red_cards++
+          if (isPuchar) stats[pid].red_puchar++
+          else stats[pid].red_liga++
+        }
+      })
+
+      // 4. Zapisz statystyki do bazy
+      const statsRows = Object.values(stats).map(s => ({ ...s, season_id: season.id }))
+      if (statsRows.length > 0) {
+        await supabase.from('season_player_stats').insert(statsRows)
+      }
+
+      // 5. Przypisz mecze i tabelę do sezonu
+      await supabase.from('matches').update({ season_id: season.id }).is('season_id', null)
       await supabase.from('league_table').update({ season_id: season.id }).is('season_id', null)
 
-      setEndMsg({ type: 'success', text: `Sezon "${seasonName}" został zapisany w Historii!` })
+      setEndMsg({ type: 'success', text: `Sezon "${seasonName}" został zapisany w Historii wraz ze statystykami graczy!` })
       setSeasonName('')
       setShowEndSeason(false)
     } catch (err) {
+      console.error(err)
       setEndMsg({ type: 'error', text: 'Błąd podczas kończenia sezonu. Spróbuj ponownie.' })
     }
     setEndingSeason(false)
@@ -69,12 +118,10 @@ export default function LoginPage() {
     padding: '12px 16px', fontSize: 16, width: '100%', outline: 'none',
     fontFamily: 'var(--font-body)', transition: 'border-color 0.2s',
   }
-
   const labelStyle = {
     fontFamily: 'var(--font-condensed)', fontSize: 12, letterSpacing: 2,
     color: 'var(--white-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 8,
   }
-
   const sectionTitle = {
     fontFamily: 'var(--font-condensed)', fontSize: 14, letterSpacing: 2,
     textTransform: 'uppercase', cursor: 'pointer', color: 'var(--white-muted)',
@@ -120,29 +167,21 @@ export default function LoginPage() {
           {showEndSeason && (
             <div style={{ marginTop: 20 }}>
               <p style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', letterSpacing: 1, marginBottom: 16, lineHeight: 1.6 }}>
-                Przeniesie wszystkie mecze i tabelę ligową do zakładki Historia. Bieżący sezon zostanie wyczyszczony. Statystyki zawodników pozostają.
+                Przeniesie wszystkie mecze, tabelę ligową i statystyki zawodników do zakładki Historia. Bieżący sezon zostanie wyczyszczony.
               </p>
               <div style={{ marginBottom: 16 }}>
                 <label style={labelStyle}>Nazwa sezonu (np. 2025/2026)</label>
-                <input
-                  style={inputStyle}
-                  value={seasonName}
-                  onChange={e => setSeasonName(e.target.value)}
+                <input style={inputStyle} value={seasonName} onChange={e => setSeasonName(e.target.value)}
                   placeholder="2025/2026"
                   onFocus={e => e.target.style.borderColor = 'var(--red)'}
-                  onBlur={e => e.target.style.borderColor = '#2a2a2a'}
-                />
+                  onBlur={e => e.target.style.borderColor = '#2a2a2a'} />
               </div>
-              <button
-                style={{
-                  background: 'var(--red)', color: 'var(--white)', border: 'none',
-                  fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 15,
-                  letterSpacing: 1, textTransform: 'uppercase', padding: '12px 24px', cursor: 'pointer',
-                  opacity: endingseason ? 0.6 : 1,
-                }}
-                onClick={handleEndSeason}
-                disabled={endingseason}
-              >
+              <button style={{
+                background: 'var(--red)', color: 'var(--white)', border: 'none',
+                fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 15,
+                letterSpacing: 1, textTransform: 'uppercase', padding: '12px 24px',
+                cursor: endingseason ? 'not-allowed' : 'pointer', opacity: endingseason ? 0.6 : 1,
+              }} onClick={handleEndSeason} disabled={endingseason}>
                 {endingseason ? 'Zapisuję...' : '🏁 Zakończ sezon'}
               </button>
             </div>
