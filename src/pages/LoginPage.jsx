@@ -99,9 +99,27 @@ export default function LoginPage() {
         await supabase.from('season_player_stats').insert(statsRows)
       }
 
-      // 5. Przypisz mecze i tabelę do sezonu
+      // 5. Przypisz mecze do sezonu
       await supabase.from('matches').update({ season_id: season.id }).is('season_id', null)
-      await supabase.from('league_table').update({ season_id: season.id }).is('season_id', null)
+
+      // 6. Skopiuj tabelę do historii i wyzeruj bieżące dane
+      const { data: currentTable } = await supabase.from('league_table').select('*').is('season_id', null)
+      if (currentTable && currentTable.length > 0) {
+        const historyCopies = currentTable.map(t => ({
+          team_name: t.team_name,
+          played: t.played,
+          goals_for: t.goals_for,
+          goals_against: t.goals_against,
+          points: t.points,
+          season_id: season.id,
+        }))
+        await supabase.from('league_table').insert(historyCopies)
+        // Wyzeruj bieżące dane drużyn
+        const ids = currentTable.map(t => t.id)
+        for (const id of ids) {
+          await supabase.from('league_table').update({ played: 0, goals_for: 0, goals_against: 0, points: 0 }).eq('id', id)
+        }
+      }
 
       setEndMsg({ type: 'success', text: `Sezon "${seasonName}" został zapisany w Historii wraz ze statystykami graczy!` })
       setSeasonName('')
