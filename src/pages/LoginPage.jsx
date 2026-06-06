@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
 
 export default function LoginPage() {
   const { isAdmin, login, logout, changePassword } = useAuth()
@@ -13,77 +14,145 @@ export default function LoginPage() {
   const [newPass, setNewPass] = useState('')
   const [confirmPass, setConfirmPass] = useState('')
   const [passMsg, setPassMsg] = useState('')
+  const [showEndSeason, setShowEndSeason] = useState(false)
+  const [seasonName, setSeasonName] = useState('')
+  const [endingseason, setEndingSeason] = useState(false)
+  const [endMsg, setEndMsg] = useState(null)
 
   function handleLogin() {
     const ok = login(username, password)
-    if (ok) {
-      navigate('/')
-    } else {
-      setError('Błędny login lub hasło.')
-    }
+    if (ok) { navigate('/') } else { setError('Błędny login lub hasło.') }
   }
 
   function handleChangePassword() {
     if (newPass !== confirmPass) { setPassMsg('Hasła nie są identyczne.'); return }
     if (newPass.length < 4) { setPassMsg('Hasło za krótkie (min. 4 znaki).'); return }
     const ok = changePassword(oldPass, newPass)
-    if (ok) {
-      setPassMsg('Hasło zostało zmienione!')
-      setOldPass(''); setNewPass(''); setConfirmPass('')
-    } else {
-      setPassMsg('Stare hasło jest nieprawidłowe.')
+    if (ok) { setPassMsg('Hasło zostało zmienione!'); setOldPass(''); setNewPass(''); setConfirmPass('') }
+    else { setPassMsg('Stare hasło jest nieprawidłowe.') }
+  }
+
+  async function handleEndSeason() {
+    if (!seasonName.trim()) { setEndMsg({ type: 'error', text: 'Wpisz nazwę sezonu!' }); return }
+    if (!confirm(`Czy na pewno chcesz zakończyć sezon "${seasonName}"? Wszystkie mecze i tabela zostaną przeniesione do Historii.`)) return
+
+    setEndingSeason(true)
+    setEndMsg(null)
+
+    try {
+      // 1. Utwórz nowy sezon
+      const { data: season, error: seasonError } = await supabase
+        .from('seasons')
+        .insert({ name: seasonName.trim() })
+        .select()
+        .single()
+
+      if (seasonError) throw seasonError
+
+      // 2. Przypisz mecze do sezonu
+      await supabase.from('matches').update({ season_id: season.id }).is('season_id', null)
+
+      // 3. Przypisz tabelę do sezonu
+      await supabase.from('league_table').update({ season_id: season.id }).is('season_id', null)
+
+      setEndMsg({ type: 'success', text: `Sezon "${seasonName}" został zapisany w Historii!` })
+      setSeasonName('')
+      setShowEndSeason(false)
+    } catch (err) {
+      setEndMsg({ type: 'error', text: 'Błąd podczas kończenia sezonu. Spróbuj ponownie.' })
     }
+    setEndingSeason(false)
   }
 
   const inputStyle = {
-    background: '#1e1e1e',
-    border: '1px solid #2a2a2a',
-    color: 'var(--white)',
-    padding: '12px 16px',
-    fontSize: 16,
-    width: '100%',
-    outline: 'none',
-    fontFamily: 'var(--font-body)',
-    transition: 'border-color 0.2s',
+    background: '#1e1e1e', border: '1px solid #2a2a2a', color: 'var(--white)',
+    padding: '12px 16px', fontSize: 16, width: '100%', outline: 'none',
+    fontFamily: 'var(--font-body)', transition: 'border-color 0.2s',
   }
 
   const labelStyle = {
-    fontFamily: 'var(--font-condensed)',
-    fontSize: 12,
-    letterSpacing: 2,
-    color: 'var(--white-muted)',
-    textTransform: 'uppercase',
-    display: 'block',
-    marginBottom: 8,
+    fontFamily: 'var(--font-condensed)', fontSize: 12, letterSpacing: 2,
+    color: 'var(--white-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 8,
+  }
+
+  const sectionTitle = {
+    fontFamily: 'var(--font-condensed)', fontSize: 14, letterSpacing: 2,
+    textTransform: 'uppercase', cursor: 'pointer', color: 'var(--white-muted)',
+    display: 'flex', justifyContent: 'space-between',
   }
 
   if (isAdmin) {
     return (
-      <div style={{ maxWidth: 480, margin: '80px auto', padding: '0 20px' }} className="fade-in">
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <img src="/logo.png" alt="PAF" style={{ height: 80, marginBottom: 16 }} />
+      <div style={{ maxWidth: 520, margin: '48px auto', padding: '0 20px' }} className="fade-in">
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <img src="/logo.png" alt="PAF" style={{ height: 72, marginBottom: 12 }} />
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: 3 }}>Panel Admina</h1>
         </div>
 
-        <div className="card" style={{ padding: 28, marginBottom: 16, borderLeft: '4px solid #4ade80' }}>
+        {endMsg && (
+          <div style={{
+            padding: '14px 18px', marginBottom: 20,
+            background: endMsg.type === 'success' ? '#0f2a0f' : '#2a0f0f',
+            border: `1px solid ${endMsg.type === 'success' ? '#4ade80' : 'var(--red)'}`,
+            color: endMsg.type === 'success' ? '#4ade80' : 'var(--red-light)',
+            fontFamily: 'var(--font-condensed)', fontSize: 15, letterSpacing: 1,
+          }}>
+            {endMsg.text}
+          </div>
+        )}
+
+        {/* Status */}
+        <div className="card" style={{ padding: 24, marginBottom: 12, borderLeft: '4px solid #4ade80' }}>
           <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, letterSpacing: 2, color: '#4ade80', textTransform: 'uppercase', marginBottom: 8 }}>
             ✓ Zalogowany jako Admin
           </div>
-          <p style={{ fontFamily: 'var(--font-condensed)', color: 'var(--white-muted)', fontSize: 14 }}>
+          <p style={{ fontFamily: 'var(--font-condensed)', color: 'var(--white-muted)', fontSize: 14, marginBottom: 16 }}>
             Masz dostęp do edycji danych w całej aplikacji.
           </p>
-          <button className="btn-danger" style={{ marginTop: 16 }} onClick={logout}>
-            Wyloguj się
-          </button>
+          <button className="btn-danger" onClick={logout}>Wyloguj się</button>
         </div>
 
-        {/* Change password */}
-        <div className="card" style={{ padding: 28 }}>
-          <div
-            style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, letterSpacing: 2, textTransform: 'uppercase', cursor: 'pointer', color: 'var(--white-muted)', display: 'flex', justifyContent: 'space-between' }}
-            onClick={() => setChangingPassword(!changingPassword)}
-          >
-            Zmień hasło {changingPassword ? '▲' : '▼'}
+        {/* Koniec sezonu */}
+        <div className="card" style={{ padding: 24, marginBottom: 12, borderLeft: '4px solid var(--red)' }}>
+          <div style={sectionTitle} onClick={() => setShowEndSeason(!showEndSeason)}>
+            🏁 Koniec sezonu {showEndSeason ? '▲' : '▼'}
+          </div>
+          {showEndSeason && (
+            <div style={{ marginTop: 20 }}>
+              <p style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', letterSpacing: 1, marginBottom: 16, lineHeight: 1.6 }}>
+                Przeniesie wszystkie mecze i tabelę ligową do zakładki Historia. Bieżący sezon zostanie wyczyszczony. Statystyki zawodników pozostają.
+              </p>
+              <div style={{ marginBottom: 16 }}>
+                <label style={labelStyle}>Nazwa sezonu (np. 2025/2026)</label>
+                <input
+                  style={inputStyle}
+                  value={seasonName}
+                  onChange={e => setSeasonName(e.target.value)}
+                  placeholder="2025/2026"
+                  onFocus={e => e.target.style.borderColor = 'var(--red)'}
+                  onBlur={e => e.target.style.borderColor = '#2a2a2a'}
+                />
+              </div>
+              <button
+                style={{
+                  background: 'var(--red)', color: 'var(--white)', border: 'none',
+                  fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 15,
+                  letterSpacing: 1, textTransform: 'uppercase', padding: '12px 24px', cursor: 'pointer',
+                  opacity: endingseason ? 0.6 : 1,
+                }}
+                onClick={handleEndSeason}
+                disabled={endingseason}
+              >
+                {endingseason ? 'Zapisuję...' : '🏁 Zakończ sezon'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Zmiana hasła */}
+        <div className="card" style={{ padding: 24 }}>
+          <div style={sectionTitle} onClick={() => setChangingPassword(!changingPassword)}>
+            🔒 Zmień hasło {changingPassword ? '▲' : '▼'}
           </div>
           {changingPassword && (
             <div style={{ marginTop: 20 }}>
@@ -95,17 +164,12 @@ export default function LoginPage() {
                 <label style={labelStyle}>Nowe hasło</label>
                 <input style={inputStyle} type="password" value={newPass} onChange={e => setNewPass(e.target.value)} />
               </div>
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: 16 }}>
                 <label style={labelStyle}>Potwierdź nowe hasło</label>
                 <input style={inputStyle} type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} />
               </div>
               {passMsg && (
-                <div style={{
-                  fontFamily: 'var(--font-condensed)',
-                  fontSize: 13,
-                  color: passMsg.includes('zmienione') ? '#4ade80' : 'var(--red-light)',
-                  marginBottom: 14,
-                }}>
+                <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: passMsg.includes('zmienione') ? '#4ade80' : 'var(--red-light)', marginBottom: 14 }}>
                   {passMsg}
                 </div>
               )}
@@ -124,39 +188,23 @@ export default function LoginPage() {
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, letterSpacing: 3 }}>Logowanie</h1>
         <div style={{ width: 40, height: 3, background: 'var(--red)', margin: '12px auto 0' }} />
       </div>
-
       <div className="card" style={{ padding: 32 }}>
         <div style={{ marginBottom: 20 }}>
           <label style={labelStyle}>Login</label>
-          <input
-            style={inputStyle}
-            value={username}
-            onChange={e => setUsername(e.target.value)}
+          <input style={inputStyle} value={username} onChange={e => setUsername(e.target.value)}
             onFocus={e => e.target.style.borderColor = 'var(--red)'}
             onBlur={e => e.target.style.borderColor = '#2a2a2a'}
-            placeholder="Login"
-            autoComplete="username"
-          />
+            placeholder="Login" autoComplete="username" />
         </div>
         <div style={{ marginBottom: 24 }}>
           <label style={labelStyle}>Hasło</label>
-          <input
-            style={inputStyle}
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
+          <input style={inputStyle} type="password" value={password} onChange={e => setPassword(e.target.value)}
             onFocus={e => e.target.style.borderColor = 'var(--red)'}
             onBlur={e => e.target.style.borderColor = '#2a2a2a'}
             onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            placeholder="Hasło"
-            autoComplete="current-password"
-          />
+            placeholder="Hasło" autoComplete="current-password" />
         </div>
-        {error && (
-          <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--red-light)', marginBottom: 16 }}>
-            {error}
-          </div>
-        )}
+        {error && <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--red-light)', marginBottom: 16 }}>{error}</div>}
         <button className="btn-primary" style={{ width: '100%', padding: '14px', fontSize: 16 }} onClick={handleLogin}>
           Zaloguj się
         </button>
