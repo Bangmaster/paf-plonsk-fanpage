@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { format, parseISO } from 'date-fns'
 import { pl } from 'date-fns/locale'
+import { createAutoBackup } from '../lib/autobackup.js'
 
 const CARD_LABELS = { yellow: '🟡 Żółta', red: '🔴 Czerwona', double_yellow: '🟡🔴 2x Żółta' }
 
@@ -81,6 +82,7 @@ export default function MatchDetail() {
     await loadAll()
     setEditingScore(false)
     setSaving(false)
+    createAutoBackup('wynik meczu')
   }
 
   async function saveSquad() {
@@ -95,9 +97,7 @@ export default function MatchDetail() {
     }
     await loadAll()
     setSaving(false)
-  }
-
-  async function addGoal() {
+    createAutoBackup('skład meczu') {
     if (!newGoalPlayerId) return
     await supabase.from('goals').insert({ match_id: id, player_id: newGoalPlayerId })
     setNewGoalPlayerId('')
