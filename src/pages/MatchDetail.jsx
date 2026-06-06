@@ -31,6 +31,7 @@ export default function MatchDetail() {
   const [editingScore, setEditingScore] = useState(false)
 
   const isPuchar = match?.competition === 'puchar'
+  
   const isRemis = score_us !== '' && score_them !== '' && parseInt(score_us) === parseInt(score_them)
   const hasExtra = match?.score_us_extra !== null && match?.score_us_extra !== undefined
 
