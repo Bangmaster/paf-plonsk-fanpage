@@ -31,7 +31,6 @@ export default function MatchDetail() {
   const [editingScore, setEditingScore] = useState(false)
 
   const isPuchar = match?.competition === 'puchar'
-  
   const isRemis = score_us !== '' && score_them !== '' && parseInt(score_us) === parseInt(score_them)
   const hasExtra = match?.score_us_extra !== null && match?.score_us_extra !== undefined
 
@@ -142,64 +141,14 @@ export default function MatchDetail() {
   const sectionStyle = { background: 'var(--black-card)', border: '1px solid var(--black-border)', padding: 24, marginBottom: 20 }
   const sectionTitleStyle = { fontFamily: 'var(--font-condensed)', fontSize: 18, fontWeight: 800, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 18, color: 'var(--gold)' }
 
-  // Wyświetlanie wyniku końcowego
-  function ScoreDisplay() {
-    const us = match.score_us
-    const them = match.score_them
-    const usE = match.score_us_extra
-    const themE = match.score_them_extra
-    const eType = match.extra_type
-
-    if (us === null) return (
-      <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 20, color: 'var(--white-muted)', letterSpacing: 2 }}>Mecz nie rozegrany</div>
-    )
-
-    const mainResult = us > them ? 'W' : us < them ? 'P' : 'R'
-    const finalResult = usE !== null && usE !== undefined
-      ? (usE > themE ? 'W' : 'P')
-      : mainResult
-
-    const resultColor = finalResult === 'W' ? '#4ade80' : finalResult === 'P' ? 'var(--red-light)' : 'var(--gold)'
-
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-        <div>
-          {/* Wynik główny */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 64, letterSpacing: 4 }}>
-              <span style={{ color: finalResult === 'W' ? '#4ade80' : finalResult === 'P' ? 'var(--red-light)' : 'var(--white-dim)' }}>{us}</span>
-              <span style={{ color: 'var(--white-muted)', margin: '0 8px', fontSize: 40 }}>:</span>
-              <span>{them}</span>
-            </div>
-            <div style={{
-              fontFamily: 'var(--font-display)', fontSize: 28,
-              color: resultColor, marginLeft: 8,
-            }}>
-              {finalResult === 'W' ? 'WYGRANA' : finalResult === 'P' ? 'PRZEGRANA' : 'REMIS'}
-            </div>
-          </div>
-
-          {/* Wynik po dogrywce/karnych */}
-          {usE !== null && usE !== undefined && (
-            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, letterSpacing: 2, color: 'var(--gold)', textTransform: 'uppercase' }}>
-                {eType === 'penalties' ? 'Po karnych:' : 'Po dogrywce:'}
-              </span>
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: usE > themE ? '#4ade80' : 'var(--red-light)' }}>
-                {usE}:{themE}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {isAdmin && (
-          <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setEditingScore(true)}>
-            ✏️ Edytuj wynik
-          </button>
-        )}
-      </div>
-    )
-  }
+  const scoreUs = match?.score_us
+  const scoreThem = match?.score_them
+  const scoreUsE = match?.score_us_extra
+  const scoreThemE = match?.score_them_extra
+  const scoreExtraType = match?.extra_type
+  const mainResult = scoreUs > scoreThem ? 'W' : scoreUs < scoreThem ? 'P' : 'R'
+  const finalResult = scoreUsE !== null && scoreUsE !== undefined ? (scoreUsE > scoreThemE ? 'W' : 'P') : mainResult
+  const resultColor = finalResult === 'W' ? '#4ade80' : finalResult === 'P' ? 'var(--red-light)' : 'var(--gold)'
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '48px 20px' }} className="fade-in">
@@ -282,7 +231,39 @@ export default function MatchDetail() {
             </div>
           </div>
         ) : (
-          <ScoreDisplay />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+            {scoreUs === null ? (
+              <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 20, color: 'var(--white-muted)', letterSpacing: 2 }}>Mecz nie rozegrany</div>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 64, letterSpacing: 4 }}>
+                    <span style={{ color: finalResult === 'W' ? '#4ade80' : finalResult === 'P' ? 'var(--red-light)' : 'var(--white-dim)' }}>{scoreUs}</span>
+                    <span style={{ color: 'var(--white-muted)', margin: '0 8px', fontSize: 40 }}>:</span>
+                    <span>{scoreThem}</span>
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: resultColor, marginLeft: 8 }}>
+                    {finalResult === 'W' ? 'WYGRANA' : finalResult === 'P' ? 'PRZEGRANA' : 'REMIS'}
+                  </div>
+                </div>
+                {scoreUsE !== null && scoreUsE !== undefined && (
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, letterSpacing: 2, color: 'var(--gold)', textTransform: 'uppercase' }}>
+                      {scoreExtraType === 'penalties' ? 'Po karnych:' : 'Po dogrywce:'}
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: scoreUsE > scoreThemE ? '#4ade80' : 'var(--red-light)' }}>
+                      {scoreUsE}:{scoreThemE}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+            {isAdmin && (
+              <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setEditingScore(true)}>
+                ✏️ Edytuj wynik
+              </button>
+            )}
+          </div>
         )}
       </div>
 
