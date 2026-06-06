@@ -97,7 +97,10 @@ export default function MatchDetail() {
     }
     await loadAll()
     setSaving(false)
-    createAutoBackup('skład meczu') {
+    createAutoBackup('skład meczu')
+  }
+
+  async function addGoal() {
     if (!newGoalPlayerId) return
     await supabase.from('goals').insert({ match_id: id, player_id: newGoalPlayerId })
     setNewGoalPlayerId('')
