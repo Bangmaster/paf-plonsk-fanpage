@@ -147,7 +147,8 @@ export default function Table() {
       ) : teams.length === 0 ? (
         <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>Brak drużyn w tabeli</div>
       ) : (
-        <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card" style={{ overflow: 'auto' }}>
+          <div style={{ minWidth: 560 }}>
           {/* Header */}
           <div style={{
             display: 'grid',
@@ -206,10 +207,9 @@ export default function Table() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 6,
-                    overflow: 'hidden',
                   }}>
                     {isPAF && <span style={{ fontSize: 11, flexShrink: 0 }}>⭐</span>}
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.team_name}</span>
+                    <span>{team.team_name}</span>
                   </div>
 
                   {/* M */}
@@ -269,6 +269,7 @@ export default function Table() {
               </div>
             )
           })}
+          </div>
         </div>
       )}
 
