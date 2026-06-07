@@ -85,8 +85,8 @@ export default function Table() {
   // Kolory pozycji
   function posColor(i, total) {
     if (i === 0) return 'var(--gold)'
-    if (i <= 2) return '#4ade80'
-    if (i >= total - 2) return 'var(--red-light)'
+    if (i === 1) return '#4ade80'
+    if (i >= total - 3) return 'var(--red-light)'
     return 'var(--white-muted)'
   }
 
@@ -275,8 +275,8 @@ export default function Table() {
       {/* Legend */}
       <div style={{ marginTop: 16, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <LegendItem color="var(--gold)" label="1. miejsce" />
-        <LegendItem color="#4ade80" label="Strefa awansu" />
-        <LegendItem color="var(--red-light)" label="Strefa spadku" />
+        <LegendItem color="#4ade80" label="Awans (top 2)" />
+        <LegendItem color="var(--red-light)" label="Spadek (3 ostatnie)" />
         <LegendItem color="#1a0f00" border="var(--gold)" label="PAF Płońsk" />
       </div>
       <div style={{ marginTop: 8, fontFamily: 'var(--font-condensed)', fontSize: 12, color: 'var(--white-muted)', letterSpacing: 1 }}>
