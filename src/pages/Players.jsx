@@ -169,7 +169,7 @@ export default function Players() {
             /* Tryb widoku */
             <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => openPlayer(player)}>
               <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 16, fontWeight: 700 }}>
-                {player.first_name} {player.last_name}
+                {player.last_name} {player.first_name}
                 {player.shirt_number && (
                   <span style={{ marginLeft: 8, fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', fontWeight: 400 }}>
                     #{player.shirt_number}
