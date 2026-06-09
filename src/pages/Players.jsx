@@ -18,7 +18,7 @@ export default function Players() {
   const [editForm, setEditForm] = useState({ first_name: '', last_name: '', shirt_number: '' })
 
   async function loadPlayers() {
-    const { data } = await supabase.from('players').select('*').order('shirt_number', { ascending: true, nullsFirst: false })
+    const { data } = await supabase.from('players').select('*').order('last_name', { ascending: true }).order('first_name', { ascending: true })
     setPlayers(data || [])
     setLoading(false)
   }
