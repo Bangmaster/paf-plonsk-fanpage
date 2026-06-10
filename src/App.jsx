@@ -9,6 +9,7 @@ import LoginPage from './pages/LoginPage.jsx'
 import Backup from './pages/Backup.jsx'
 import Table from './pages/Table.jsx'
 import History from './pages/History.jsx'
+import PlayerProfile from './pages/PlayerProfile.jsx'
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/tabela" element={<Table />} />
           <Route path="/podsumowanie" element={<Summary />} />
           <Route path="/historia" element={<History />} />
+          <Route path="/zawodnik/:id" element={<PlayerProfile />} />
           <Route path="/admin" element={<LoginPage />} />
           <Route path="/backup" element={<Backup />} />
         </Routes>

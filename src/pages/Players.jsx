@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useNavigate } from 'react-router-dom'
 
 export default function Players() {
   const { isAdmin } = useAuth()
+  const navigate = useNavigate()
   const [players, setPlayers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -11,9 +13,6 @@ export default function Players() {
   const [lastName, setLastName] = useState('')
   const [shirtNumber, setShirtNumber] = useState('')
   const [saving, setSaving] = useState(false)
-  const [selectedPlayer, setSelectedPlayer] = useState(null)
-  const [playerStats, setPlayerStats] = useState(null)
-  const [statsLoading, setStatsLoading] = useState(false)
   const [editingPlayer, setEditingPlayer] = useState(null)
   const [editForm, setEditForm] = useState({ first_name: '', last_name: '', shirt_number: '' })
 
@@ -67,24 +66,7 @@ export default function Players() {
   }
 
   async function openPlayer(player) {
-    if (selectedPlayer?.id === player.id) { setSelectedPlayer(null); setPlayerStats(null); return }
-    setSelectedPlayer(player)
-    setStatsLoading(true)
-    const [{ data: g }, { data: c }, { data: mp }] = await Promise.all([
-      supabase.from('goals').select('id, matches(match_date, opponent)').eq('player_id', player.id),
-      supabase.from('cards').select('id, card_type, matches(match_date, opponent)').eq('player_id', player.id),
-      supabase.from('match_players').select('id, minutes_played, matches(match_date, opponent, status)').eq('player_id', player.id),
-    ])
-    const totalMinutes = (mp || []).filter(m => m.matches?.status === 'played').reduce((sum, m) => sum + (m.minutes_played || 0), 0)
-    setPlayerStats({
-      goals: g || [],
-      cards: c || [],
-      matchPlayers: (mp || []).filter(m => m.matches?.status === 'played'),
-      totalMinutes,
-      yellowCards: (c || []).filter(c => c.card_type === 'yellow' || c.card_type === 'double_yellow').length,
-      redCards: (c || []).filter(c => c.card_type === 'red' || c.card_type === 'double_yellow').length,
-    })
-    setStatsLoading(false)
+    navigate(`/zawodnik/${player.id}`)
   }
 
   const active = players.filter(p => p.active)
@@ -101,7 +83,6 @@ export default function Players() {
   }
 
   function PlayerCard({ player }) {
-    const isSelected = selectedPlayer?.id === player.id
     const isEditing = editingPlayer === player.id
 
     return (
@@ -113,7 +94,7 @@ export default function Players() {
             display: 'flex',
             alignItems: 'center',
             gap: 12,
-            borderLeft: isSelected ? '3px solid var(--gold)' : '3px solid transparent',
+            borderLeft: '3px solid transparent',
             transition: 'all 0.2s',
           }}
         >
@@ -237,27 +218,7 @@ export default function Players() {
           )}
         </div>
 
-        {/* Stats panel */}
-        {isSelected && !isEditing && (
-          <div style={{
-            background: '#141414',
-            border: '1px solid var(--black-border)',
-            borderTop: 'none',
-            padding: '20px 18px',
-          }}>
-            {statsLoading ? (
-              <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)' }}>Ładowanie...</div>
-            ) : playerStats ? (
-              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-                <StatBox label="Mecze" value={playerStats.matchPlayers.length} />
-                <StatBox label="Minuty" value={playerStats.totalMinutes + "'"} />
-                <StatBox label="Gole" value={playerStats.goals.length} color="var(--gold)" />
-                <StatBox label="Żółte" value={playerStats.yellowCards} color="#facc15" />
-                <StatBox label="Czerwone" value={playerStats.redCards} color="var(--red-light)" />
-              </div>
-            ) : null}
-          </div>
-        )}
+        {/* Stats panel removed - click navigates to full profile */}
       </div>
     )
   }
