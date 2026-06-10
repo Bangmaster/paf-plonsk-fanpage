@@ -44,8 +44,11 @@ export default function PixelPlayer() {
       posRef.current += 2.5
       setPos(posRef.current)
 
-      // Zatrzymaj się w 1/3 szerokości ekranu
-      const stopPoint = navbarWidth.current * 0.33
+      // Zatrzymaj się — na mobile dalej (po logo), na desktop w 1/3
+      const isMobile = navbarWidth.current < 768
+      const stopPoint = isMobile
+        ? navbarWidth.current * 0.55
+        : navbarWidth.current * 0.35
       if (posRef.current >= stopPoint && posRef.current < stopPoint + 5) {
         celebratingRef.current = true
         setCelebrating(true)
@@ -106,34 +109,33 @@ export default function PixelPlayer() {
       flexDirection: 'column',
       alignItems: 'center',
     }}>
-      {/* Krzyk */}
+      {/* Krzyk — dymek po prawej stronie piłkarza */}
       {celebrating && showShout && (
         <div style={{
           position: 'absolute',
-          bottom: 52,
-          left: '50%',
-          transform: 'translateX(-50%)',
+          bottom: 14,
+          left: 44,
           background: 'var(--gold)',
           color: 'var(--black)',
           fontFamily: 'var(--font-display)',
           fontSize: 13,
           letterSpacing: 1,
-          padding: '4px 10px',
+          padding: '5px 10px',
           whiteSpace: 'nowrap',
-          animation: 'fadeIn 0.2s ease',
           zIndex: 20,
+          boxShadow: '2px 2px 0px #000',
         }}>
           {SHOUTS[shoutIndex]}
-          {/* Dymek strzałka */}
+          {/* Dymek strzałka w lewo */}
           <div style={{
             position: 'absolute',
-            bottom: -6,
-            left: '50%',
-            transform: 'translateX(-50%)',
+            left: -6,
+            top: '50%',
+            transform: 'translateY(-50%)',
             width: 0, height: 0,
-            borderLeft: '6px solid transparent',
-            borderRight: '6px solid transparent',
-            borderTop: '6px solid var(--gold)',
+            borderTop: '6px solid transparent',
+            borderBottom: '6px solid transparent',
+            borderRight: '6px solid var(--gold)',
           }} />
         </div>
       )}
