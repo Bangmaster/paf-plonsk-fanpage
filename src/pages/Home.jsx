@@ -4,6 +4,14 @@ import { supabase } from '../lib/supabase.js'
 import { format, parseISO, differenceInDays, differenceInHours, differenceInMinutes } from 'date-fns'
 import { pl } from 'date-fns/locale'
 
+async function incrementVisits() {
+  const { data } = await supabase.from('page_visits').select('*').limit(1).single()
+  if (!data) return 0
+  const newCount = (data.count || 0) + 1
+  await supabase.from('page_visits').update({ count: newCount }).eq('id', data.id)
+  return newCount
+}
+
 function Countdown({ match }) {
   const [timeLeft, setTimeLeft] = useState('')
 
@@ -129,6 +137,7 @@ export default function Home() {
   const [streak, setStreak] = useState(null)
   const [goals, setGoals] = useState([])
   const [loading, setLoading] = useState(true)
+  const [visits, setVisits] = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -167,6 +176,16 @@ export default function Home() {
       setStreak(s)
 
       setLoading(false)
+
+      // Licznik odwiedzin — tylko raz na sesję
+      if (!sessionStorage.getItem('paf_visited')) {
+        sessionStorage.setItem('paf_visited', 'true')
+        const count = await incrementVisits()
+        setVisits(count)
+      } else {
+        const { data: v } = await supabase.from('page_visits').select('count').limit(1).single()
+        setVisits(v?.count || 0)
+      }
     }
     load()
   }, [])
@@ -183,6 +202,25 @@ export default function Home() {
           Statystyki • Terminarz • Zawodnicy
         </p>
         <div style={{ width: 64, height: 3, background: 'var(--red)', margin: '16px auto 0' }} />
+        {visits !== null && (
+          <div style={{
+            marginTop: 16,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            background: 'var(--black-card)',
+            border: '1px solid var(--black-border)',
+            padding: '6px 16px',
+          }}>
+            <span style={{ fontSize: 14 }}>👁️</span>
+            <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase' }}>
+              Odwiedziny:
+            </span>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--gold)', letterSpacing: 2 }}>
+              {visits.toLocaleString('pl-PL')}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Forma + seria */}
