@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../context/AuthContext.jsx'
 import { format, parseISO, differenceInDays, differenceInHours, differenceInMinutes } from 'date-fns'
 import { pl } from 'date-fns/locale'
 
@@ -131,6 +132,7 @@ function MatchCard({ match, label, accent, goals, nextMatch }) {
 }
 
 export default function Home() {
+  const { isAdmin } = useAuth()
   const [lastMatch, setLastMatch] = useState(null)
   const [nextMatch, setNextMatch] = useState(null)
   const [form, setForm] = useState([])
@@ -202,7 +204,7 @@ export default function Home() {
           Statystyki • Terminarz • Zawodnicy
         </p>
         <div style={{ width: 64, height: 3, background: 'var(--red)', margin: '16px auto 0' }} />
-        {visits !== null && (
+        {isAdmin && visits !== null && (
           <div style={{
             marginTop: 16,
             display: 'inline-flex',
