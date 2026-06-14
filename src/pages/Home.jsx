@@ -6,11 +6,29 @@ import { format, parseISO, differenceInDays, differenceInHours, differenceInMinu
 import { pl } from 'date-fns/locale'
 
 async function incrementVisits() {
-  const { data } = await supabase.from('page_visits').select('*').limit(1).single()
-  if (!data) return 0
-  const newCount = (data.count || 0) + 1
-  await supabase.from('page_visits').update({ count: newCount }).eq('id', data.id)
-  return newCount
+  try {
+    // Sprawdź czy już liczono dziś z tej przeglądarki
+    const today = new Date().toDateString()
+    const lastVisit = localStorage.getItem('paf_last_visit')
+    
+    const { data } = await supabase.from('page_visits').select('*').limit(1).single()
+    if (!data) return 0
+
+    if (lastVisit !== today) {
+      localStorage.setItem('paf_last_visit', today)
+      const { data: updated } = await supabase
+        .from('page_visits')
+        .update({ count: (data.count || 0) + 1 })
+        .eq('id', data.id)
+        .select()
+        .single()
+      return updated?.count || data.count + 1
+    }
+    return data.count
+  } catch (e) {
+    console.error('Visit counter error:', e)
+    return 0
+  }
 }
 
 function Countdown({ match }) {
@@ -179,15 +197,9 @@ export default function Home() {
 
       setLoading(false)
 
-      // Licznik odwiedzin — tylko raz na sesję
-      if (!sessionStorage.getItem('paf_visited')) {
-        sessionStorage.setItem('paf_visited', 'true')
-        const count = await incrementVisits()
-        setVisits(count)
-      } else {
-        const { data: v } = await supabase.from('page_visits').select('count').limit(1).single()
-        setVisits(v?.count || 0)
-      }
+      // Licznik odwiedzin
+      const count = await incrementVisits()
+      setVisits(count)
     }
     load()
   }, [])
