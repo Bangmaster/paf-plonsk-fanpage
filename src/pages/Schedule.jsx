@@ -6,12 +6,8 @@ import { format, parseISO } from 'date-fns'
 import { pl } from 'date-fns/locale'
 
 const emptyForm = {
-  match_date: '',
-  match_time: '',
-  opponent: '',
-  is_home: true,
-  competition: 'liga',
-  status: 'planned',
+  match_date: '', match_time: '', opponent: '',
+  is_home: true, competition: 'liga', status: 'planned',
 }
 
 export default function Schedule() {
@@ -25,7 +21,12 @@ export default function Schedule() {
   const [filter, setFilter] = useState('all')
 
   async function loadMatches() {
-    const { data } = await supabase.from('matches').select('*').order('match_date', { ascending: true })
+    // Tylko mecze z bieżącego sezonu (season_id IS NULL)
+    const { data } = await supabase
+      .from('matches')
+      .select('*')
+      .is('season_id', null)
+      .order('match_date', { ascending: true })
     setMatches(data || [])
     setLoading(false)
   }
@@ -38,7 +39,7 @@ export default function Schedule() {
     if (editId) {
       await supabase.from('matches').update(form).eq('id', editId)
     } else {
-      await supabase.from('matches').insert(form)
+      await supabase.from('matches').insert({ ...form, season_id: null })
     }
     await loadMatches()
     setForm(emptyForm)
@@ -70,13 +71,8 @@ export default function Schedule() {
   const filtered = filter === 'all' ? matches : matches.filter(m => m.competition === filter)
 
   const labelStyle = {
-    fontFamily: 'var(--font-condensed)',
-    fontSize: 12,
-    letterSpacing: 2,
-    color: 'var(--white-muted)',
-    textTransform: 'uppercase',
-    display: 'block',
-    marginBottom: 6,
+    fontFamily: 'var(--font-condensed)', fontSize: 12, letterSpacing: 2,
+    color: 'var(--white-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 6,
   }
 
   return (
@@ -93,7 +89,6 @@ export default function Schedule() {
         )}
       </div>
 
-      {/* Add/Edit form */}
       {isAdmin && showForm && (
         <div className="card" style={{ padding: 24, marginBottom: 32, borderLeft: '4px solid var(--red)' }}>
           <h3 style={{ fontFamily: 'var(--font-condensed)', fontSize: 18, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 20 }}>
@@ -138,82 +133,51 @@ export default function Schedule() {
             <button className="btn-gold" onClick={handleSave} disabled={saving}>
               {saving ? 'Zapisuję...' : editId ? 'Zapisz zmiany' : 'Dodaj mecz'}
             </button>
-            <button className="btn-ghost" onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm) }}>
-              Anuluj
-            </button>
+            <button className="btn-ghost" onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm) }}>Anuluj</button>
           </div>
         </div>
       )}
 
-      {/* Filter */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
         {[['all', 'Wszystkie'], ['liga', 'Liga'], ['puchar', 'Puchar']].map(([val, label]) => (
-          <button
-            key={val}
-            onClick={() => setFilter(val)}
-            style={{
-              fontFamily: 'var(--font-condensed)',
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: 1,
-              textTransform: 'uppercase',
-              padding: '6px 16px',
-              border: 'none',
-              cursor: 'pointer',
-              background: filter === val ? 'var(--red)' : 'var(--black-card)',
-              color: filter === val ? 'var(--white)' : 'var(--white-muted)',
-              transition: 'all 0.2s',
-            }}
-          >
-            {label}
-          </button>
+          <button key={val} onClick={() => setFilter(val)} style={{
+            fontFamily: 'var(--font-condensed)', fontSize: 13, fontWeight: 700,
+            letterSpacing: 1, textTransform: 'uppercase', padding: '6px 16px',
+            border: 'none', cursor: 'pointer',
+            background: filter === val ? 'var(--red)' : 'var(--black-card)',
+            color: filter === val ? 'var(--white)' : 'var(--white-muted)',
+            transition: 'all 0.2s',
+          }}>{label}</button>
         ))}
       </div>
 
-      {/* Matches list */}
       {loading ? (
         <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>Ładowanie...</div>
       ) : filtered.length === 0 ? (
-        <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>Brak meczów</div>
+        <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>Brak meczów w bieżącym sezonie</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {filtered.map((match, i) => {
             const date = match.match_date ? format(parseISO(match.match_date), 'd MMM yyyy', { locale: pl }) : '—'
             const time = match.match_time ? match.match_time.slice(0, 5) : ''
             const isPlayed = match.status === 'played'
+            const usF = match.score_us_extra ?? match.score_us
+            const themF = match.score_them_extra ?? match.score_them
 
             return (
-              <div
-                key={match.id}
-                className="card"
-                style={{
-                  padding: '16px 20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 16,
-                  flexWrap: 'wrap',
-                  borderLeft: isPlayed ? '3px solid var(--black-border)' : '3px solid var(--red)',
-                  animation: `fadeIn 0.3s ease ${i * 0.05}s both`,
-                }}
-              >
-                {/* Round number */}
-                <div style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 22,
-                  color: 'var(--white-muted)',
-                  minWidth: 32,
-                  textAlign: 'center',
-                }}>
+              <div key={match.id} className="card" style={{
+                padding: '16px 20px', display: 'flex', alignItems: 'center',
+                gap: 16, flexWrap: 'wrap',
+                borderLeft: isPlayed ? '3px solid var(--black-border)' : '3px solid var(--red)',
+                animation: `fadeIn 0.3s ease ${i * 0.04}s both`,
+              }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--white-muted)', minWidth: 32, textAlign: 'center' }}>
                   {i + 1}
                 </div>
-
-                {/* Date */}
-                <div style={{ minWidth: 110 }}>
+                <div style={{ minWidth: 100 }}>
                   <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 15, fontWeight: 600 }}>{date}</div>
                   {time && <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)' }}>{time}</div>}
                 </div>
-
-                {/* Badges */}
                 <div style={{ display: 'flex', gap: 6 }}>
                   <span className={match.competition === 'puchar' ? 'badge-puchar' : 'badge-liga'}>
                     {match.competition === 'puchar' ? 'Puchar' : 'Liga'}
@@ -222,46 +186,34 @@ export default function Schedule() {
                     {match.is_home ? 'Dom' : 'Wyjazd'}
                   </span>
                 </div>
-
-                {/* Teams */}
                 <div style={{ flex: 1, fontFamily: 'var(--font-condensed)', fontSize: 17, fontWeight: 700 }}>
                   PAF Płońsk <span style={{ color: 'var(--white-muted)', fontWeight: 400 }}>vs</span> {match.opponent}
                 </div>
-
-                {/* Score */}
                 {isPlayed && match.score_us !== null && (
                   <div style={{
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 26,
-                    letterSpacing: 2,
-                    color: match.score_us > match.score_them ? '#4ade80' : match.score_us < match.score_them ? 'var(--red-light)' : 'var(--white-dim)',
+                    fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: 2,
+                    color: usF > themF ? '#4ade80' : usF < themF ? 'var(--red-light)' : 'var(--white-dim)',
                   }}>
                     {match.score_us}:{match.score_them}
+                    {match.score_us_extra !== null && match.score_us_extra !== undefined && (
+                      <span style={{ fontSize: 14, color: 'var(--gold)', marginLeft: 6 }}>
+                        ({match.extra_type === 'penalties' ? 'k' : 'd'}: {match.score_us_extra}:{match.score_them_extra})
+                      </span>
+                    )}
                   </div>
                 )}
-
                 {!isPlayed && (
                   <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, letterSpacing: 2, color: 'var(--red)', textTransform: 'uppercase' }}>
                     Zaplanowany
                   </div>
                 )}
-
-                {/* Actions */}
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <Link
-                    to={`/mecz/${match.id}`}
-                    style={{
-                      fontFamily: 'var(--font-condensed)',
-                      fontSize: 13,
-                      fontWeight: 700,
-                      letterSpacing: 1,
-                      textTransform: 'uppercase',
-                      padding: '6px 14px',
-                      background: 'var(--black-soft)',
-                      border: '1px solid var(--black-border)',
-                      color: 'var(--white-dim)',
-                      transition: 'all 0.2s',
-                    }}
+                  <Link to={`/mecz/${match.id}`} style={{
+                    fontFamily: 'var(--font-condensed)', fontSize: 13, fontWeight: 700,
+                    letterSpacing: 1, textTransform: 'uppercase', padding: '6px 14px',
+                    background: 'var(--black-soft)', border: '1px solid var(--black-border)',
+                    color: 'var(--white-dim)', transition: 'all 0.2s',
+                  }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--white-muted)'; e.currentTarget.style.color = 'var(--white)' }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--black-border)'; e.currentTarget.style.color = 'var(--white-dim)' }}
                   >
