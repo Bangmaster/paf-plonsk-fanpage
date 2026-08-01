@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { Link } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { pl } from 'date-fns/locale'
-
-const TABS = ['mecze', 'tabela', 'statystyki']
 
 export default function History() {
   const [seasons, setSeasons] = useState([])
@@ -98,24 +97,13 @@ export default function History() {
 
       {/* All-time stats */}
       <div className="card" style={{ marginBottom: 32, borderLeft: '4px solid var(--gold)' }}>
-        <div
-          style={{ padding: '20px 24px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-          onClick={() => {
-            setShowAllTime(!showAllTime)
-            if (!showAllTime && allTimeStats.length === 0) loadAllTimeStats()
-          }}
-        >
+        <div style={{ padding: '20px 24px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+          onClick={() => { setShowAllTime(!showAllTime); if (!showAllTime && allTimeStats.length === 0) loadAllTimeStats() }}>
           <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 3, color: 'var(--gold)' }}>
-              🏆 Statystyki wszech czasów
-            </div>
-            <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', letterSpacing: 1, marginTop: 4 }}>
-              Suma statystyk ze wszystkich sezonów
-            </div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 3, color: 'var(--gold)' }}>🏆 Statystyki wszech czasów</div>
+            <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', letterSpacing: 1, marginTop: 4 }}>Suma statystyk ze wszystkich sezonów</div>
           </div>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--white-muted)' }}>
-            {showAllTime ? '▲' : '▼'}
-          </div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--white-muted)' }}>{showAllTime ? '▲' : '▼'}</div>
         </div>
 
         {showAllTime && (
@@ -139,13 +127,11 @@ export default function History() {
         )}
       </div>
 
-      {/* Seasons list */}
+      {/* Seasons */}
       {loading ? (
         <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>Ładowanie...</div>
       ) : seasons.length === 0 ? (
-        <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>
-          Brak zapisanych sezonów. Zakończ sezon w Panelu Admina.
-        </div>
+        <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>Brak zapisanych sezonów.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {seasons.map(season => {
@@ -155,25 +141,22 @@ export default function History() {
             const wins = data?.matches?.filter(m => {
               const usF = m.score_us_extra ?? m.score_us
               const themF = m.score_them_extra ?? m.score_them
-              return usF > themF
+              return usF !== null && usF > themF
             }).length || 0
             const losses = data?.matches?.filter(m => {
               const usF = m.score_us_extra ?? m.score_us
               const themF = m.score_them_extra ?? m.score_them
-              return usF < themF
+              return usF !== null && usF < themF
             }).length || 0
             const draws = (data?.matches?.filter(m => m.score_us !== null).length || 0) - wins - losses
             const pafPos = data?.table?.findIndex(t => t.team_name.toLowerCase().includes('paf')) + 1
 
             return (
               <div key={season.id} className="card" style={{ overflow: 'hidden' }}>
-                {/* Header */}
-                <div
-                  style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', borderLeft: '4px solid var(--red)', flexWrap: 'wrap', gap: 12 }}
-                  onClick={() => openSeasonDetail(season)}
-                >
+                <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', borderLeft: '4px solid var(--red)', flexWrap: 'wrap', gap: 12 }}
+                  onClick={() => openSeasonDetail(season)}>
                   <div>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: 3, color: 'var(--white)' }}>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: 3 }}>
                       Sezon <span style={{ color: 'var(--gold)' }}>{season.name}</span>
                     </div>
                     <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', letterSpacing: 1, marginTop: 4 }}>
@@ -182,9 +165,7 @@ export default function History() {
                       {data && ` • ${wins}W ${draws}R ${losses}P`}
                     </div>
                   </div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--white-muted)' }}>
-                    {isOpen ? '▲' : '▼'}
-                  </div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--white-muted)' }}>{isOpen ? '▲' : '▼'}</div>
                 </div>
 
                 {isOpen && (
@@ -193,7 +174,6 @@ export default function History() {
                       <div style={{ padding: 24, color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)' }}>Ładowanie...</div>
                     ) : (
                       <>
-                        {/* Tabs */}
                         <div style={{ display: 'flex', gap: 4, padding: '16px 24px 0', flexWrap: 'wrap' }}>
                           <button style={tabStyle(currentTab, 'mecze')} onClick={() => setTab(season.id, 'mecze')}>📅 Mecze</button>
                           <button style={tabStyle(currentTab, 'tabela')} onClick={() => setTab(season.id, 'tabela')}>📊 Tabela</button>
@@ -201,12 +181,12 @@ export default function History() {
                         </div>
 
                         <div style={{ padding: '16px 24px 24px' }}>
-                          {/* Mecze */}
+                          {/* Mecze — KLIKALNE linki do szczegółów */}
                           {currentTab === 'mecze' && (
                             data.matches.length === 0 ? (
                               <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)' }}>Brak meczów</div>
                             ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                 {data.matches.map(m => {
                                   const date = m.match_date ? format(parseISO(m.match_date), 'd MMM yyyy', { locale: pl }) : '—'
                                   const usF = m.score_us_extra ?? m.score_us
@@ -214,22 +194,37 @@ export default function History() {
                                   const result = usF > themF ? 'W' : usF < themF ? 'P' : 'R'
                                   const rc = result === 'W' ? '#4ade80' : result === 'P' ? 'var(--red-light)' : 'var(--gold)'
                                   return (
-                                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#161616', border: '1px solid var(--black-border)', flexWrap: 'wrap' }}>
-                                      <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', minWidth: 85 }}>{date}</span>
-                                      <span className={m.competition === 'puchar' ? 'badge-puchar' : 'badge-liga'}>{m.competition === 'puchar' ? 'Puchar' : 'Liga'}</span>
-                                      <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, flex: 1 }}>PAF Płońsk vs {m.opponent}</span>
-                                      {m.score_us !== null && (
-                                        <>
-                                          <span style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>{m.score_us}:{m.score_them}</span>
-                                          {m.score_us_extra !== null && m.score_us_extra !== undefined && (
-                                            <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, color: 'var(--gold)' }}>
-                                              ({m.extra_type === 'penalties' ? 'k' : 'd'}: {m.score_us_extra}:{m.score_them_extra})
-                                            </span>
-                                          )}
-                                          <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: rc, minWidth: 14 }}>{result}</span>
-                                        </>
-                                      )}
-                                    </div>
+                                    <Link key={m.id} to={`/mecz/${m.id}`} style={{ textDecoration: 'none' }}>
+                                      <div style={{
+                                        display: 'flex', alignItems: 'center', gap: 10,
+                                        padding: '10px 14px', background: '#161616',
+                                        border: '1px solid var(--black-border)', flexWrap: 'wrap',
+                                        transition: 'border-color 0.15s, background 0.15s',
+                                        cursor: 'pointer',
+                                      }}
+                                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.background = '#1a1200' }}
+                                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--black-border)'; e.currentTarget.style.background = '#161616' }}
+                                      >
+                                        <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', minWidth: 85 }}>{date}</span>
+                                        <span className={m.competition === 'puchar' ? 'badge-puchar' : 'badge-liga'}>{m.competition === 'puchar' ? 'Puchar' : 'Liga'}</span>
+                                        <span className={m.is_home ? 'badge-home' : 'badge-away'}>{m.is_home ? 'Dom' : 'Wyjazd'}</span>
+                                        <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, flex: 1 }}>PAF Płońsk vs {m.opponent}</span>
+                                        {m.score_us !== null && (
+                                          <>
+                                            <span style={{ fontFamily: 'var(--font-display)', fontSize: 20 }}>{m.score_us}:{m.score_them}</span>
+                                            {m.score_us_extra !== null && m.score_us_extra !== undefined && (
+                                              <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, color: 'var(--gold)' }}>
+                                                ({m.extra_type === 'penalties' ? 'k' : 'd'}: {m.score_us_extra}:{m.score_them_extra})
+                                              </span>
+                                            )}
+                                            <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: rc, minWidth: 14 }}>{result}</span>
+                                          </>
+                                        )}
+                                        <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--gold)', letterSpacing: 1, textTransform: 'uppercase' }}>
+                                          Szczegóły →
+                                        </span>
+                                      </div>
+                                    </Link>
                                   )
                                 })}
                               </div>
@@ -319,17 +314,14 @@ function StatsTable({ players, tab }) {
   if (!players || players.length === 0) return (
     <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)' }}>Brak danych</div>
   )
-
   const cols = {
     goals: '36px 1fr 60px 60px 60px',
     minutes: '36px 1fr 80px',
     matches: '36px 1fr 80px',
     cards: '36px 1fr 60px 60px 60px 60px',
   }
-
   return (
     <div style={{ overflow: 'auto' }}>
-      {/* Header */}
       <div style={{ display: 'grid', gridTemplateColumns: cols[tab], padding: '8px 12px', borderBottom: '1px solid var(--black-border)', gap: 4, minWidth: tab === 'cards' ? 420 : 300 }}>
         <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--white-muted)', textTransform: 'uppercase' }}>#</div>
         <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--white-muted)', textTransform: 'uppercase' }}>Zawodnik</div>
@@ -347,7 +339,6 @@ function StatsTable({ players, tab }) {
           <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--red-light)', textTransform: 'uppercase', textAlign: 'center' }}>🔴</div>
         </>}
       </div>
-
       {players.map((p, i) => {
         const isTop = i === 0
         return (
@@ -355,8 +346,7 @@ function StatsTable({ players, tab }) {
             display: 'grid', gridTemplateColumns: cols[tab],
             padding: '10px 12px', borderBottom: '1px solid #1a1a1a',
             background: isTop ? '#1a1200' : i % 2 === 0 ? 'transparent' : '#111',
-            alignItems: 'center', gap: 4,
-            minWidth: tab === 'cards' ? 420 : 300,
+            alignItems: 'center', gap: 4, minWidth: tab === 'cards' ? 420 : 300,
           }}>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: isTop ? 20 : 16, color: isTop ? 'var(--gold)' : 'var(--white-muted)' }}>{i + 1}</div>
             <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 15, fontWeight: isTop ? 700 : 400 }}>
