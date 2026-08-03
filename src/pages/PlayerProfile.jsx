@@ -17,14 +17,17 @@ export default function PlayerProfile() {
 
   // Poprzednie sezony
   const [seasonStats, setSeasonStats] = useState([])
+  const [seasonMatches, setSeasonMatches] = useState([])
+  const [seasonGoals, setSeasonGoals] = useState([])
+  const [seasonCards, setSeasonCards] = useState([])
+  const [seasons, setSeasons] = useState([])
 
   useEffect(() => {
     async function load() {
       const { data: p } = await supabase.from('players').select('*').eq('id', id).single()
       setPlayer(p)
 
-      // Bieżący sezon — mecze gdzie season_id IS NULL
-      const [{ data: mp }, { data: g }, { data: c }, { data: ss }] = await Promise.all([
+      const [{ data: mp }, { data: g }, { data: c }, { data: ss }, { data: seasonsData }] = await Promise.all([
         supabase.from('match_players')
           .select('*, matches(id, match_date, opponent, score_us, score_them, score_us_extra, score_them_extra, competition, is_home, status, season_id)')
           .eq('player_id', id),
@@ -35,16 +38,23 @@ export default function PlayerProfile() {
           .select('*, matches(id, match_date, opponent, competition, season_id)')
           .eq('player_id', id),
         supabase.from('season_player_stats')
-          .select('*, seasons(name)')
+          .select('*, seasons(id, name)')
           .eq('player_id', id)
           .order('created_at', { ascending: false }),
+        supabase.from('seasons').select('*').order('created_at', { ascending: false }),
       ])
 
-      // Filtruj tylko bieżący sezon
+      // Bieżący sezon — season_id IS NULL
       setCurrentMatches((mp || []).filter(m => m.matches?.season_id === null && m.matches?.status === 'played'))
       setCurrentGoals((g || []).filter(g => g.matches?.season_id === null))
       setCurrentCards((c || []).filter(c => c.matches?.season_id === null))
+
+      // Poprzednie sezony — wszystkie z season_id
+      setSeasonMatches((mp || []).filter(m => m.matches?.season_id !== null && m.matches?.status === 'played'))
+      setSeasonGoals((g || []).filter(g => g.matches?.season_id !== null))
+      setSeasonCards((c || []).filter(c => c.matches?.season_id !== null))
       setSeasonStats(ss || [])
+      setSeasons(seasonsData || [])
 
       setLoading(false)
     }
@@ -92,44 +102,63 @@ export default function PlayerProfile() {
             {player.last_name} {player.first_name}
           </h1>
           <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-            {player.shirt_number && (
-              <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, color: 'var(--gold)', letterSpacing: 1 }}>#{player.shirt_number}</span>
-            )}
-            {!player.active && (
-              <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--white-muted)', letterSpacing: 2, textTransform: 'uppercase' }}>Nieaktywny</span>
-            )}
+            {player.shirt_number && <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, color: 'var(--gold)', letterSpacing: 1 }}>#{player.shirt_number}</span>}
+            {!player.active && <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--white-muted)', letterSpacing: 2, textTransform: 'uppercase' }}>Nieaktywny</span>}
           </div>
         </div>
       </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 24, flexWrap: 'wrap' }}>
-        <button style={tabStyle('current')} onClick={() => setTab('current')}>
-          ⚽ Bieżący sezon
-        </button>
+        <button style={tabStyle('current')} onClick={() => setTab('current')}>⚽ Bieżący sezon</button>
         <button style={tabStyle('history')} onClick={() => setTab('history')}>
-          📋 Poprzednie sezony {seasonStats.length > 0 && `(${seasonStats.length})`}
+          📋 Poprzednie sezony {seasons.length > 0 && `(${seasons.length})`}
         </button>
       </div>
 
-      {/* Bieżący sezon */}
       {tab === 'current' && (
-        <CurrentSeason
+        <SeasonView
           matches={currentMatches}
           goals={currentGoals}
           cards={currentCards}
+          seasonLabel="Bieżący sezon"
         />
       )}
 
-      {/* Poprzednie sezony */}
       {tab === 'history' && (
-        <PreviousSeasons seasonStats={seasonStats} />
+        seasons.length === 0 ? (
+          <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', fontSize: 15, padding: '24px 0' }}>
+            Brak danych z poprzednich sezonów.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {seasons.map(season => {
+              const sMatches = seasonMatches.filter(m => m.matches?.season_id === season.id)
+              const sGoals = seasonGoals.filter(g => g.matches?.season_id === season.id)
+              const sCards = seasonCards.filter(c => c.matches?.season_id === season.id)
+              if (sMatches.length === 0 && sGoals.length === 0) return null
+              return (
+                <div key={season.id}>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 3, color: 'var(--gold)', marginBottom: 12 }}>
+                    Sezon {season.name}
+                  </div>
+                  <SeasonView
+                    matches={sMatches}
+                    goals={sGoals}
+                    cards={sCards}
+                    seasonLabel={season.name}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )
       )}
     </div>
   )
 }
 
-function CurrentSeason({ matches, goals, cards }) {
+function SeasonView({ matches, goals, cards, seasonLabel }) {
   const totalMinutes = matches.reduce((s, m) => s + (m.minutes_played || 0), 0)
   const totalGoals = goals.length
   const goalsLiga = goals.filter(g => g.matches?.competition !== 'puchar').length
@@ -150,15 +179,15 @@ function CurrentSeason({ matches, goals, cards }) {
   })
 
   if (matches.length === 0 && goals.length === 0) return (
-    <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', fontSize: 15, padding: '24px 0' }}>
-      Brak danych w bieżącym sezonie.
+    <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', fontSize: 15, padding: '16px 0' }}>
+      Brak danych w tym sezonie.
     </div>
   )
 
   return (
     <div>
       {/* Statystyki */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
         <StatBox label="Mecze" value={matches.length} />
         <StatBox label="Minuty" value={`${totalMinutes}'`} />
         <StatBox label="Gole" value={totalGoals} color="var(--gold)" />
@@ -169,77 +198,49 @@ function CurrentSeason({ matches, goals, cards }) {
       </div>
 
       {/* Lista meczów */}
-      <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, letterSpacing: 3, color: 'var(--gold)', textTransform: 'uppercase', marginBottom: 12 }}>
-        Mecze w bieżącym sezonie
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {matches.sort((a, b) => new Date(b.matches?.match_date) - new Date(a.matches?.match_date)).map(mp => {
-          const m = mp.matches
-          if (!m) return null
-          const date = m.match_date ? format(parseISO(m.match_date), 'd MMM yyyy', { locale: pl }) : '—'
-          const usF = m.score_us_extra ?? m.score_us
-          const themF = m.score_them_extra ?? m.score_them
-          const result = usF > themF ? 'W' : usF < themF ? 'P' : 'R'
-          const rc = result === 'W' ? '#4ade80' : result === 'P' ? 'var(--red-light)' : 'var(--gold)'
-          const matchGoals = goalsByMatch[m.id] || 0
-          const matchCards = cardsByMatch[m.id] || []
+      {matches.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {[...matches].sort((a, b) => new Date(b.matches?.match_date) - new Date(a.matches?.match_date)).map(mp => {
+            const m = mp.matches
+            if (!m) return null
+            const date = m.match_date ? format(parseISO(m.match_date), 'd MMM yyyy', { locale: pl }) : '—'
+            const usF = m.score_us_extra ?? m.score_us
+            const themF = m.score_them_extra ?? m.score_them
+            const result = usF > themF ? 'W' : usF < themF ? 'P' : 'R'
+            const rc = result === 'W' ? '#4ade80' : result === 'P' ? 'var(--red-light)' : 'var(--gold)'
+            const matchGoals = goalsByMatch[m.id] || 0
+            const matchCards = cardsByMatch[m.id] || []
 
-          return (
-            <Link key={mp.id} to={`/mecz/${m.id}`} style={{ textDecoration: 'none' }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-                background: '#161616', border: '1px solid var(--black-border)',
-                transition: 'border-color 0.15s, background 0.15s', flexWrap: 'wrap',
-              }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.background = '#1a1200' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--black-border)'; e.currentTarget.style.background = '#161616' }}
-              >
-                <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', minWidth: 85 }}>{date}</span>
-                <span className={m.competition === 'puchar' ? 'badge-puchar' : 'badge-liga'}>{m.competition === 'puchar' ? 'Puchar' : 'Liga'}</span>
-                <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, flex: 1 }}>PAF Płońsk vs {m.opponent}</span>
-                {m.score_us !== null && <span style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>{m.score_us}:{m.score_them}</span>}
-                <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: rc, minWidth: 14 }}>{result}</span>
-                <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', minWidth: 32 }}>{mp.minutes_played}'</span>
-                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                  {matchGoals > 0 && <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--gold)' }}>⚽{matchGoals > 1 ? ` x${matchGoals}` : ''}</span>}
-                  {matchCards.map((ct, i) => (
-                    <span key={i}>{ct === 'yellow' ? '🟡' : ct === 'red' ? '🔴' : '🟡🔴'}</span>
-                  ))}
+            return (
+              <Link key={mp.id} to={`/mecz/${m.id}`} style={{ textDecoration: 'none' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                  background: '#161616', border: '1px solid var(--black-border)',
+                  transition: 'border-color 0.15s, background 0.15s', flexWrap: 'wrap',
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.background = '#1a1200' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--black-border)'; e.currentTarget.style.background = '#161616' }}
+                >
+                  <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', minWidth: 85 }}>{date}</span>
+                  <span className={m.competition === 'puchar' ? 'badge-puchar' : 'badge-liga'}>{m.competition === 'puchar' ? 'Puchar' : 'Liga'}</span>
+                  <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, flex: 1 }}>PAF Płońsk vs {m.opponent}</span>
+                  {m.score_us !== null && (
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>{m.score_us}:{m.score_them}</span>
+                  )}
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: rc, minWidth: 14 }}>{result}</span>
+                  <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', minWidth: 32 }}>{mp.minutes_played}'</span>
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    {matchGoals > 0 && <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--gold)' }}>⚽{matchGoals > 1 ? ` x${matchGoals}` : ''}</span>}
+                    {matchCards.map((ct, i) => (
+                      <span key={i}>{ct === 'yellow' ? '🟡' : ct === 'red' ? '🔴' : '🟡🔴'}</span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </Link>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function PreviousSeasons({ seasonStats }) {
-  if (seasonStats.length === 0) return (
-    <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', fontSize: 15, padding: '24px 0' }}>
-      Brak danych z poprzednich sezonów.
-    </div>
-  )
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {seasonStats.map(s => (
-        <div key={s.id} className="card" style={{ padding: 24, borderLeft: '4px solid var(--gold)' }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 3, color: 'var(--gold)', marginBottom: 16 }}>
-            Sezon {s.seasons?.name || '—'}
-          </div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <StatBox label="Mecze" value={s.matches_played} />
-            <StatBox label="Minuty" value={`${s.minutes}'`} />
-            <StatBox label="Gole" value={s.goals} color="var(--gold)" />
-            {s.goals_liga > 0 && <StatBox label="Liga" value={s.goals_liga} color="var(--red-light)" />}
-            {s.goals_puchar > 0 && <StatBox label="Puchar" value={s.goals_puchar} color="#facc15" />}
-            {s.yellow_cards > 0 && <StatBox label="Żółte" value={s.yellow_cards} color="#facc15" />}
-            {s.red_cards > 0 && <StatBox label="Czerwone" value={s.red_cards} color="var(--red-light)" />}
-          </div>
+              </Link>
+            )
+          })}
         </div>
-      ))}
+      )}
     </div>
   )
 }
