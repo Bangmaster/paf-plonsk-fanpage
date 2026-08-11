@@ -1,65 +1,83 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
+import { useAuth } from '../context/AuthContext.jsx'
 import { format, parseISO } from 'date-fns'
 import { pl } from 'date-fns/locale'
 
 export default function PlayerProfile() {
   const { id } = useParams()
+  const { isAdmin } = useAuth()
   const [player, setPlayer] = useState(null)
   const [tab, setTab] = useState('current')
   const [loading, setLoading] = useState(true)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
-  // Bieżący sezon
   const [currentMatches, setCurrentMatches] = useState([])
   const [currentGoals, setCurrentGoals] = useState([])
   const [currentCards, setCurrentCards] = useState([])
 
-  // Poprzednie sezony
-  const [seasonStats, setSeasonStats] = useState([])
   const [seasonMatches, setSeasonMatches] = useState([])
   const [seasonGoals, setSeasonGoals] = useState([])
   const [seasonCards, setSeasonCards] = useState([])
   const [seasons, setSeasons] = useState([])
 
-  useEffect(() => {
-    async function load() {
-      const { data: p } = await supabase.from('players').select('*').eq('id', id).single()
-      setPlayer(p)
+  async function loadAll() {
+    const { data: p } = await supabase.from('players').select('*').eq('id', id).single()
+    setPlayer(p)
 
-      const [{ data: mp }, { data: g }, { data: c }, { data: ss }, { data: seasonsData }] = await Promise.all([
-        supabase.from('match_players')
-          .select('*, matches(id, match_date, opponent, score_us, score_them, score_us_extra, score_them_extra, competition, is_home, status, season_id)')
-          .eq('player_id', id),
-        supabase.from('goals')
-          .select('*, matches(id, match_date, opponent, competition, season_id)')
-          .eq('player_id', id),
-        supabase.from('cards')
-          .select('*, matches(id, match_date, opponent, competition, season_id)')
-          .eq('player_id', id),
-        supabase.from('season_player_stats')
-          .select('*, seasons(id, name)')
-          .eq('player_id', id)
-          .order('created_at', { ascending: false }),
-        supabase.from('seasons').select('*').order('created_at', { ascending: false }),
-      ])
+    const [{ data: mp }, { data: g }, { data: c }, { data: seasonsData }] = await Promise.all([
+      supabase.from('match_players')
+        .select('*, matches(id, match_date, opponent, score_us, score_them, score_us_extra, score_them_extra, competition, is_home, status, season_id)')
+        .eq('player_id', id),
+      supabase.from('goals')
+        .select('*, matches(id, match_date, opponent, competition, season_id)')
+        .eq('player_id', id),
+      supabase.from('cards')
+        .select('*, matches(id, match_date, opponent, competition, season_id)')
+        .eq('player_id', id),
+      supabase.from('seasons').select('*').order('created_at', { ascending: false }),
+    ])
 
-      // Bieżący sezon — season_id IS NULL
-      setCurrentMatches((mp || []).filter(m => m.matches?.season_id === null && m.matches?.status === 'played'))
-      setCurrentGoals((g || []).filter(g => g.matches?.season_id === null))
-      setCurrentCards((c || []).filter(c => c.matches?.season_id === null))
+    setCurrentMatches((mp || []).filter(m => m.matches?.season_id === null && m.matches?.status === 'played'))
+    setCurrentGoals((g || []).filter(g => g.matches?.season_id === null))
+    setCurrentCards((c || []).filter(c => c.matches?.season_id === null))
 
-      // Poprzednie sezony — wszystkie z season_id
-      setSeasonMatches((mp || []).filter(m => m.matches?.season_id !== null && m.matches?.status === 'played'))
-      setSeasonGoals((g || []).filter(g => g.matches?.season_id !== null))
-      setSeasonCards((c || []).filter(c => c.matches?.season_id !== null))
-      setSeasonStats(ss || [])
-      setSeasons(seasonsData || [])
+    setSeasonMatches((mp || []).filter(m => m.matches?.season_id !== null && m.matches?.status === 'played'))
+    setSeasonGoals((g || []).filter(g => g.matches?.season_id !== null))
+    setSeasonCards((c || []).filter(c => c.matches?.season_id !== null))
+    setSeasons(seasonsData || [])
 
-      setLoading(false)
+    setLoading(false)
+  }
+
+  useEffect(() => { loadAll() }, [id])
+
+  async function uploadPhoto(file) {
+    if (!file) return
+    setUploadingPhoto(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `${id}.${ext}`
+      await supabase.storage.from('player-photos').remove([path])
+      const { error } = await supabase.storage.from('player-photos').upload(path, file, { upsert: true })
+      if (error) throw error
+      const { data: urlData } = supabase.storage.from('player-photos').getPublicUrl(path)
+      await supabase.from('players').update({ photo_url: urlData.publicUrl + '?t=' + Date.now() }).eq('id', id)
+      await loadAll()
+    } catch (err) {
+      alert('Błąd uploadu: ' + err.message)
     }
-    load()
-  }, [id])
+    setUploadingPhoto(false)
+  }
+
+  async function removePhoto() {
+    if (!confirm('Usunąć zdjęcie?')) return
+    const ext = player.photo_url?.split('.').pop()?.split('?')[0]
+    if (ext) await supabase.storage.from('player-photos').remove([`${id}.${ext}`])
+    await supabase.from('players').update({ photo_url: null }).eq('id', id)
+    await loadAll()
+  }
 
   if (loading) return (
     <div style={{ padding: 48, textAlign: 'center', color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>Ładowanie...</div>
@@ -87,23 +105,66 @@ export default function PlayerProfile() {
       </Link>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 32, flexWrap: 'wrap' }}>
-        <div style={{
-          width: 80, height: 80,
-          background: player.active ? 'var(--red)' : 'var(--black-border)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: 'var(--font-display)', fontSize: player.shirt_number ? 32 : 22,
-          color: 'var(--white)', flexShrink: 0,
-        }}>
-          {player.shirt_number || `${player.last_name[0]}${player.first_name[0]}`}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 24, marginBottom: 32, flexWrap: 'wrap' }}>
+        {/* Zdjęcie */}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          {player.photo_url ? (
+            <img src={player.photo_url} alt={`${player.last_name} ${player.first_name}`}
+              style={{ width: 120, height: 120, objectFit: 'cover', border: '3px solid var(--red)' }} />
+          ) : (
+            <div style={{
+              width: 120, height: 120, background: player.active ? 'var(--red)' : 'var(--black-border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'var(--font-display)', fontSize: player.shirt_number ? 48 : 32, color: 'var(--white)',
+            }}>
+              {player.shirt_number || `${player.last_name[0]}${player.first_name[0]}`}
+            </div>
+          )}
+
+          {/* Admin — upload zdjęcia */}
+          {isAdmin && (
+            <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+              <label style={{
+                flex: 1, background: 'var(--gold)', color: 'var(--black)',
+                fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 12,
+                letterSpacing: 1, textTransform: 'uppercase', padding: '6px 10px',
+                cursor: uploadingPhoto ? 'not-allowed' : 'pointer',
+                textAlign: 'center', opacity: uploadingPhoto ? 0.6 : 1,
+              }}>
+                {uploadingPhoto ? '⏳' : '📷 Zmień'}
+                <input type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={e => uploadPhoto(e.target.files[0])} disabled={uploadingPhoto} />
+              </label>
+              {player.photo_url && (
+                <button onClick={removePhoto} style={{
+                  background: 'transparent', border: '1px solid var(--red)',
+                  color: 'var(--red-light)', fontFamily: 'var(--font-condensed)',
+                  fontWeight: 700, fontSize: 12, letterSpacing: 1, padding: '6px 10px',
+                  cursor: 'pointer', textTransform: 'uppercase',
+                }}>
+                  🗑️
+                </button>
+              )}
+            </div>
+          )}
         </div>
-        <div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(28px, 6vw, 48px)', letterSpacing: 3, lineHeight: 1 }}>
+
+        {/* Dane */}
+        <div style={{ flex: 1 }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(28px, 6vw, 52px)', letterSpacing: 3, lineHeight: 1, marginBottom: 8 }}>
             {player.last_name} {player.first_name}
           </h1>
-          <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
-            {player.shirt_number && <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, color: 'var(--gold)', letterSpacing: 1 }}>#{player.shirt_number}</span>}
-            {!player.active && <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--white-muted)', letterSpacing: 2, textTransform: 'uppercase' }}>Nieaktywny</span>}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {player.shirt_number && (
+              <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 16, color: 'var(--gold)', letterSpacing: 1 }}>
+                #{player.shirt_number}
+              </span>
+            )}
+            {!player.active && (
+              <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--white-muted)', letterSpacing: 2, textTransform: 'uppercase' }}>
+                Nieaktywny
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -117,12 +178,7 @@ export default function PlayerProfile() {
       </div>
 
       {tab === 'current' && (
-        <SeasonView
-          matches={currentMatches}
-          goals={currentGoals}
-          cards={currentCards}
-          seasonLabel="Bieżący sezon"
-        />
+        <SeasonView matches={currentMatches} goals={currentGoals} cards={currentCards} />
       )}
 
       {tab === 'history' && (
@@ -142,12 +198,7 @@ export default function PlayerProfile() {
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: 3, color: 'var(--gold)', marginBottom: 12 }}>
                     Sezon {season.name}
                   </div>
-                  <SeasonView
-                    matches={sMatches}
-                    goals={sGoals}
-                    cards={sCards}
-                    seasonLabel={season.name}
-                  />
+                  <SeasonView matches={sMatches} goals={sGoals} cards={sCards} />
                 </div>
               )
             })}
@@ -158,7 +209,7 @@ export default function PlayerProfile() {
   )
 }
 
-function SeasonView({ matches, goals, cards, seasonLabel }) {
+function SeasonView({ matches, goals, cards }) {
   const totalMinutes = matches.reduce((s, m) => s + (m.minutes_played || 0), 0)
   const totalGoals = goals.length
   const goalsLiga = goals.filter(g => g.matches?.competition !== 'puchar').length
@@ -167,10 +218,7 @@ function SeasonView({ matches, goals, cards, seasonLabel }) {
   const redCards = cards.filter(c => c.card_type === 'red' || c.card_type === 'double_yellow').length
 
   const goalsByMatch = {}
-  goals.forEach(g => {
-    if (!g.matches?.id) return
-    goalsByMatch[g.matches.id] = (goalsByMatch[g.matches.id] || 0) + 1
-  })
+  goals.forEach(g => { if (g.matches?.id) goalsByMatch[g.matches.id] = (goalsByMatch[g.matches.id] || 0) + 1 })
   const cardsByMatch = {}
   cards.forEach(c => {
     if (!c.matches?.id) return
@@ -186,7 +234,6 @@ function SeasonView({ matches, goals, cards, seasonLabel }) {
 
   return (
     <div>
-      {/* Statystyki */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
         <StatBox label="Mecze" value={matches.length} />
         <StatBox label="Minuty" value={`${totalMinutes}'`} />
@@ -197,7 +244,6 @@ function SeasonView({ matches, goals, cards, seasonLabel }) {
         {redCards > 0 && <StatBox label="Czerwone" value={redCards} color="var(--red-light)" />}
       </div>
 
-      {/* Lista meczów */}
       {matches.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {[...matches].sort((a, b) => new Date(b.matches?.match_date) - new Date(a.matches?.match_date)).map(mp => {
@@ -224,16 +270,12 @@ function SeasonView({ matches, goals, cards, seasonLabel }) {
                   <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', minWidth: 85 }}>{date}</span>
                   <span className={m.competition === 'puchar' ? 'badge-puchar' : 'badge-liga'}>{m.competition === 'puchar' ? 'Puchar' : 'Liga'}</span>
                   <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, flex: 1 }}>PAF Płońsk vs {m.opponent}</span>
-                  {m.score_us !== null && (
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>{m.score_us}:{m.score_them}</span>
-                  )}
+                  {m.score_us !== null && <span style={{ fontFamily: 'var(--font-display)', fontSize: 18 }}>{m.score_us}:{m.score_them}</span>}
                   <span style={{ fontFamily: 'var(--font-display)', fontSize: 16, color: rc, minWidth: 14 }}>{result}</span>
                   <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', minWidth: 32 }}>{mp.minutes_played}'</span>
                   <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                     {matchGoals > 0 && <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--gold)' }}>⚽{matchGoals > 1 ? ` x${matchGoals}` : ''}</span>}
-                    {matchCards.map((ct, i) => (
-                      <span key={i}>{ct === 'yellow' ? '🟡' : ct === 'red' ? '🔴' : '🟡🔴'}</span>
-                    ))}
+                    {matchCards.map((ct, i) => <span key={i}>{ct === 'yellow' ? '🟡' : ct === 'red' ? '🔴' : '🟡🔴'}</span>)}
                   </div>
                 </div>
               </Link>

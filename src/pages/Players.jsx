@@ -15,9 +15,14 @@ export default function Players() {
   const [saving, setSaving] = useState(false)
   const [editingPlayer, setEditingPlayer] = useState(null)
   const [editForm, setEditForm] = useState({ first_name: '', last_name: '', shirt_number: '' })
+  const [uploadingPhoto, setUploadingPhoto] = useState(null)
 
   async function loadPlayers() {
-    const { data } = await supabase.from('players').select('*').order('last_name', { ascending: true }).order('first_name', { ascending: true })
+    const { data } = await supabase
+      .from('players')
+      .select('*')
+      .order('last_name', { ascending: true })
+      .order('first_name', { ascending: true })
     setPlayers(data || [])
     setLoading(false)
   }
@@ -61,94 +66,133 @@ export default function Players() {
   async function deletePlayer(id) {
     if (!confirm('Usunąć zawodnika? Wszystkie jego statystyki zostaną usunięte.')) return
     await supabase.from('players').delete().eq('id', id)
-    if (selectedPlayer?.id === id) setSelectedPlayer(null)
     await loadPlayers()
   }
 
-  async function openPlayer(player) {
-    navigate(`/zawodnik/${player.id}`)
+  async function uploadPhoto(player, file) {
+    if (!file) return
+    setUploadingPhoto(player.id)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `${player.id}.${ext}`
+
+      // Usuń stare zdjęcie jeśli istnieje
+      await supabase.storage.from('player-photos').remove([path])
+
+      const { error } = await supabase.storage
+        .from('player-photos')
+        .upload(path, file, { upsert: true })
+
+      if (error) throw error
+
+      const { data: urlData } = supabase.storage
+        .from('player-photos')
+        .getPublicUrl(path)
+
+      await supabase.from('players')
+        .update({ photo_url: urlData.publicUrl + '?t=' + Date.now() })
+        .eq('id', player.id)
+
+      await loadPlayers()
+    } catch (err) {
+      alert('Błąd uploadu: ' + err.message)
+    }
+    setUploadingPhoto(null)
+  }
+
+  async function removePhoto(player) {
+    if (!confirm('Usunąć zdjęcie?')) return
+    const ext = player.photo_url?.split('.').pop()?.split('?')[0]
+    if (ext) await supabase.storage.from('player-photos').remove([`${player.id}.${ext}`])
+    await supabase.from('players').update({ photo_url: null }).eq('id', player.id)
+    await loadPlayers()
   }
 
   const active = players.filter(p => p.active)
   const inactive = players.filter(p => !p.active)
 
   const labelStyle = {
-    fontFamily: 'var(--font-condensed)',
-    fontSize: 11,
-    letterSpacing: 2,
-    color: 'var(--white-muted)',
-    textTransform: 'uppercase',
-    display: 'block',
-    marginBottom: 6,
+    fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2,
+    color: 'var(--white-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 6,
   }
 
   function PlayerCard({ player }) {
     const isEditing = editingPlayer === player.id
+    const isUploading = uploadingPhoto === player.id
 
     return (
       <div>
-        <div
-          className="card"
-          style={{
-            padding: '14px 18px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            borderLeft: '3px solid transparent',
-            transition: 'all 0.2s',
-          }}
-        >
-          {/* Numer koszulki */}
-          <div style={{
-            width: 44, height: 44,
-            background: player.active ? 'var(--red)' : 'var(--black-border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'var(--font-display)',
-            fontSize: player.shirt_number ? 20 : 14,
-            color: 'var(--white)',
-            flexShrink: 0,
-            cursor: 'pointer',
-          }}
-            onClick={() => openPlayer(player)}
-          >
-            {player.shirt_number || `${player.first_name[0]}${player.last_name[0]}`}
+        <div className="card" style={{
+          padding: '14px 18px', display: 'flex', alignItems: 'center',
+          gap: 12, borderLeft: '3px solid transparent', transition: 'all 0.2s',
+        }}>
+          {/* Avatar / Zdjęcie */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            {player.photo_url ? (
+              <img
+                src={player.photo_url}
+                alt={`${player.last_name} ${player.first_name}`}
+                style={{
+                  width: 48, height: 48, objectFit: 'cover',
+                  border: '2px solid var(--red)',
+                  cursor: 'pointer',
+                }}
+                onClick={() => navigate(`/zawodnik/${player.id}`)}
+              />
+            ) : (
+              <div style={{
+                width: 48, height: 48,
+                background: player.active ? 'var(--red)' : 'var(--black-border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'var(--font-display)',
+                fontSize: player.shirt_number ? 18 : 14,
+                color: 'var(--white)', cursor: 'pointer',
+              }} onClick={() => navigate(`/zawodnik/${player.id}`)}>
+                {player.shirt_number || `${player.last_name[0]}${player.first_name[0]}`}
+              </div>
+            )}
+            {/* Upload button overlay dla admina */}
+            {isAdmin && (
+              <label style={{
+                position: 'absolute', bottom: -4, right: -4,
+                width: 18, height: 18, background: 'var(--gold)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', fontSize: 10, borderRadius: '50%',
+                border: '1px solid var(--black)',
+              }}>
+                {isUploading ? '⏳' : '📷'}
+                <input
+                  type="file" accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={e => uploadPhoto(player, e.target.files[0])}
+                  disabled={isUploading}
+                />
+              </label>
+            )}
           </div>
 
           {isEditing ? (
-            /* Tryb edycji */
             <div style={{ flex: 1, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input
-                className="input-field"
-                value={editForm.first_name}
+              <input className="input-field" value={editForm.first_name}
                 onChange={e => setEditForm({ ...editForm, first_name: e.target.value })}
-                placeholder="Imię"
-                style={{ width: 120, padding: '6px 10px', fontSize: 14 }}
-              />
-              <input
-                className="input-field"
-                value={editForm.last_name}
+                placeholder="Imię" style={{ width: 120, padding: '6px 10px', fontSize: 14 }} />
+              <input className="input-field" value={editForm.last_name}
                 onChange={e => setEditForm({ ...editForm, last_name: e.target.value })}
-                placeholder="Nazwisko"
-                style={{ width: 140, padding: '6px 10px', fontSize: 14 }}
-              />
-              <input
-                className="input-field"
-                type="number"
-                value={editForm.shirt_number}
+                placeholder="Nazwisko" style={{ width: 140, padding: '6px 10px', fontSize: 14 }} />
+              <input className="input-field" type="number" value={editForm.shirt_number}
                 onChange={e => setEditForm({ ...editForm, shirt_number: e.target.value })}
-                placeholder="Nr"
-                style={{ width: 70, padding: '6px 10px', fontSize: 14 }}
-              />
-              <button className="btn-gold" style={{ padding: '6px 14px', fontSize: 13 }} onClick={saveEdit} disabled={saving}>
+                placeholder="Nr" style={{ width: 70, padding: '6px 10px', fontSize: 14 }} />
+              <button className="btn-gold" style={{ padding: '6px 14px', fontSize: 13 }}
+                onClick={saveEdit} disabled={saving}>
                 {saving ? '...' : 'Zapisz'}
               </button>
-              <button className="btn-ghost" style={{ padding: '6px 12px', fontSize: 13 }} onClick={() => setEditingPlayer(null)}>
+              <button className="btn-ghost" style={{ padding: '6px 12px', fontSize: 13 }}
+                onClick={() => setEditingPlayer(null)}>
                 Anuluj
               </button>
             </div>
           ) : (
-            /* Tryb widoku */
-            <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => openPlayer(player)}>
+            <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => navigate(`/zawodnik/${player.id}`)}>
               <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 16, fontWeight: 700 }}>
                 {player.last_name} {player.first_name}
                 {player.shirt_number && (
@@ -166,59 +210,39 @@ export default function Players() {
           )}
 
           {isAdmin && !isEditing && (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                style={{
-                  fontFamily: 'var(--font-condensed)',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: 1,
-                  textTransform: 'uppercase',
-                  padding: '5px 10px',
-                  background: 'transparent',
-                  border: '1px solid #333',
-                  color: 'var(--white-muted)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onClick={() => {
-                  setEditingPlayer(player.id)
-                  setEditForm({
-                    first_name: player.first_name,
-                    last_name: player.last_name,
-                    shirt_number: player.shirt_number || '',
-                  })
-                  setSelectedPlayer(null)
-                }}
-              >
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              {player.photo_url && (
+                <button className="btn-danger" style={{ padding: '5px 8px', fontSize: 11 }}
+                  onClick={() => removePhoto(player)} title="Usuń zdjęcie">
+                  🗑️📷
+                </button>
+              )}
+              <button style={{
+                fontFamily: 'var(--font-condensed)', fontSize: 12, fontWeight: 700,
+                letterSpacing: 1, textTransform: 'uppercase', padding: '5px 10px',
+                background: 'transparent', border: '1px solid #333',
+                color: 'var(--white-muted)', cursor: 'pointer', transition: 'all 0.2s',
+              }} onClick={() => {
+                setEditingPlayer(player.id)
+                setEditForm({ first_name: player.first_name, last_name: player.last_name, shirt_number: player.shirt_number || '' })
+              }}>
                 ✏️ Edytuj
               </button>
-              <button
-                style={{
-                  fontFamily: 'var(--font-condensed)',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: 1,
-                  textTransform: 'uppercase',
-                  padding: '5px 10px',
-                  background: 'transparent',
-                  border: '1px solid ' + (player.active ? '#4ade8044' : '#4ade80'),
-                  color: player.active ? 'var(--white-muted)' : '#4ade80',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onClick={() => toggleActive(player)}
-              >
+              <button style={{
+                fontFamily: 'var(--font-condensed)', fontSize: 12, fontWeight: 700,
+                letterSpacing: 1, textTransform: 'uppercase', padding: '5px 10px',
+                background: 'transparent',
+                border: '1px solid ' + (player.active ? '#4ade8044' : '#4ade80'),
+                color: player.active ? 'var(--white-muted)' : '#4ade80',
+                cursor: 'pointer', transition: 'all 0.2s',
+              }} onClick={() => toggleActive(player)}>
                 {player.active ? 'Dezaktywuj' : 'Aktywuj'}
               </button>
-              <button className="btn-danger" style={{ padding: '5px 10px', fontSize: 12 }} onClick={() => deletePlayer(player.id)}>
-                🗑️
-              </button>
+              <button className="btn-danger" style={{ padding: '5px 10px', fontSize: 12 }}
+                onClick={() => deletePlayer(player.id)}>🗑️</button>
             </div>
           )}
         </div>
-
-        {/* Stats panel removed - click navigates to full profile */}
       </div>
     )
   }
@@ -237,7 +261,6 @@ export default function Players() {
         )}
       </div>
 
-      {/* Add form */}
       {isAdmin && showForm && (
         <div className="card" style={{ padding: 24, marginBottom: 28, borderLeft: '4px solid var(--red)' }}>
           <h3 style={{ fontFamily: 'var(--font-condensed)', fontSize: 16, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 16 }}>
@@ -254,7 +277,8 @@ export default function Players() {
             </div>
             <div style={{ width: 100 }}>
               <label style={labelStyle}>Nr koszulki</label>
-              <input className="input-field" type="number" value={shirtNumber} onChange={e => setShirtNumber(e.target.value)} placeholder="Nr"
+              <input className="input-field" type="number" value={shirtNumber}
+                onChange={e => setShirtNumber(e.target.value)} placeholder="Nr"
                 onKeyDown={e => e.key === 'Enter' && addPlayer()} />
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
@@ -270,6 +294,11 @@ export default function Players() {
         <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>Ładowanie...</div>
       ) : (
         <>
+          {isAdmin && (
+            <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, color: 'var(--white-muted)', letterSpacing: 1, marginBottom: 12 }}>
+              💡 Kliknij 📷 przy zawodniku żeby dodać jego zdjęcie
+            </div>
+          )}
           <div style={{ marginBottom: 4, fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase' }}>
             Aktywni ({active.length})
           </div>
@@ -291,15 +320,6 @@ export default function Players() {
           )}
         </>
       )}
-    </div>
-  )
-}
-
-function StatBox({ label, value, color = 'var(--white)' }) {
-  return (
-    <div style={{ textAlign: 'center', minWidth: 60 }}>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color, letterSpacing: 1 }}>{value}</div>
-      <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase' }}>{label}</div>
     </div>
   )
 }
