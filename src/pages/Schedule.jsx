@@ -10,21 +10,30 @@ const emptyForm = {
   is_home: true, competition: 'liga', status: 'planned',
 }
 
+function validate(form) {
+  const errors = {}
+  if (!form.opponent?.trim()) errors.opponent = 'Nazwa rywala jest wymagana'
+  if (!form.match_date) errors.match_date = 'Data jest wymagana'
+  return errors
+}
+
 export default function Schedule() {
   const { isAdmin } = useAuth()
   const [matches, setMatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const [errors, setErrors] = useState({})
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState('all')
+  const [quickEditId, setQuickEditId] = useState(null)
+  const [quickScore, setQuickScore] = useState({ us: '', them: '' })
+  const [copiedLink, setCopiedLink] = useState(null)
 
   async function loadMatches() {
-    // Tylko mecze z bieżącego sezonu (season_id IS NULL)
     const { data } = await supabase
-      .from('matches')
-      .select('*')
+      .from('matches').select('*')
       .is('season_id', null)
       .order('match_date', { ascending: true })
     setMatches(data || [])
@@ -34,7 +43,8 @@ export default function Schedule() {
   useEffect(() => { loadMatches() }, [])
 
   async function handleSave() {
-    if (!form.match_date || !form.opponent) return
+    const errs = validate(form)
+    if (Object.keys(errs).length > 0) { setErrors(errs); return }
     setSaving(true)
     if (editId) {
       await supabase.from('matches').update(form).eq('id', editId)
@@ -42,9 +52,7 @@ export default function Schedule() {
       await supabase.from('matches').insert({ ...form, season_id: null })
     }
     await loadMatches()
-    setForm(emptyForm)
-    setEditId(null)
-    setShowForm(false)
+    setForm(emptyForm); setErrors({}); setEditId(null); setShowForm(false)
     setSaving(false)
   }
 
@@ -54,24 +62,47 @@ export default function Schedule() {
     await loadMatches()
   }
 
+  async function saveQuickScore(match) {
+    const us = parseInt(quickScore.us)
+    const them = parseInt(quickScore.them)
+    if (isNaN(us) || isNaN(them) || us < 0 || them < 0) return
+    await supabase.from('matches').update({
+      score_us: us, score_them: them, status: 'played'
+    }).eq('id', match.id)
+    setQuickEditId(null)
+    await loadMatches()
+  }
+
+  function copyMatchLink(matchId) {
+    const url = `${window.location.origin}/mecz/${matchId}`
+    navigator.clipboard.writeText(url)
+    setCopiedLink(matchId)
+    setTimeout(() => setCopiedLink(null), 2000)
+  }
+
   function startEdit(match) {
     setForm({
-      match_date: match.match_date,
-      match_time: match.match_time || '',
-      opponent: match.opponent,
-      is_home: match.is_home,
-      competition: match.competition,
-      status: match.status,
+      match_date: match.match_date, match_time: match.match_time || '',
+      opponent: match.opponent, is_home: match.is_home,
+      competition: match.competition, status: match.status,
     })
-    setEditId(match.id)
-    setShowForm(true)
+    setErrors({})
+    setEditId(match.id); setShowForm(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const filtered = filter === 'all' ? matches : matches.filter(m => m.competition === filter)
 
+  const inputStyle = (hasErr) => ({
+    background: '#222', border: `1px solid ${hasErr ? 'var(--red)' : 'var(--black-border)'}`,
+    color: 'var(--white)', padding: '10px 14px', fontSize: 15,
+    width: '100%', outline: 'none', fontFamily: 'var(--font-body)',
+    boxShadow: hasErr ? '0 0 0 2px rgba(192,57,43,0.2)' : 'none',
+    transition: 'all 0.2s',
+  })
+
   const labelStyle = {
-    fontFamily: 'var(--font-condensed)', fontSize: 12, letterSpacing: 2,
+    fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2,
     color: 'var(--white-muted)', textTransform: 'uppercase', display: 'block', marginBottom: 6,
   }
 
@@ -83,7 +114,7 @@ export default function Schedule() {
           <div className="gold-line" />
         </div>
         {isAdmin && (
-          <button className="btn-primary" onClick={() => { setShowForm(!showForm); setEditId(null); setForm(emptyForm) }}>
+          <button className="btn-primary" onClick={() => { setShowForm(!showForm); setEditId(null); setForm(emptyForm); setErrors({}) }}>
             {showForm ? 'Anuluj' : '+ Dodaj mecz'}
           </button>
         )}
@@ -97,33 +128,42 @@ export default function Schedule() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
             <div>
               <label style={labelStyle}>Rywal *</label>
-              <input className="input-field" value={form.opponent} onChange={e => setForm({ ...form, opponent: e.target.value })} placeholder="Nazwa drużyny" />
+              <input style={inputStyle(!!errors.opponent)} value={form.opponent}
+                onChange={e => { setForm({ ...form, opponent: e.target.value }); setErrors({ ...errors, opponent: null }) }}
+                placeholder="Nazwa drużyny" />
+              {errors.opponent && <div style={{ fontSize: 12, color: 'var(--red-light)', marginTop: 4 }}>⚠️ {errors.opponent}</div>}
             </div>
             <div>
               <label style={labelStyle}>Data *</label>
-              <input className="input-field" type="date" value={form.match_date} onChange={e => setForm({ ...form, match_date: e.target.value })} />
+              <input style={inputStyle(!!errors.match_date)} type="date" value={form.match_date}
+                onChange={e => { setForm({ ...form, match_date: e.target.value }); setErrors({ ...errors, match_date: null }) }} />
+              {errors.match_date && <div style={{ fontSize: 12, color: 'var(--red-light)', marginTop: 4 }}>⚠️ {errors.match_date}</div>}
             </div>
             <div>
               <label style={labelStyle}>Godzina</label>
-              <input className="input-field" type="time" value={form.match_time} onChange={e => setForm({ ...form, match_time: e.target.value })} />
+              <input style={inputStyle(false)} type="time" value={form.match_time}
+                onChange={e => setForm({ ...form, match_time: e.target.value })} />
             </div>
             <div>
               <label style={labelStyle}>Lokalizacja</label>
-              <select className="input-field" value={form.is_home ? 'home' : 'away'} onChange={e => setForm({ ...form, is_home: e.target.value === 'home' })}>
+              <select style={inputStyle(false)} value={form.is_home ? 'home' : 'away'}
+                onChange={e => setForm({ ...form, is_home: e.target.value === 'home' })}>
                 <option value="home">Dom</option>
                 <option value="away">Wyjazd</option>
               </select>
             </div>
             <div>
               <label style={labelStyle}>Rozgrywki</label>
-              <select className="input-field" value={form.competition} onChange={e => setForm({ ...form, competition: e.target.value })}>
+              <select style={inputStyle(false)} value={form.competition}
+                onChange={e => setForm({ ...form, competition: e.target.value })}>
                 <option value="liga">Liga</option>
                 <option value="puchar">Puchar Polski</option>
               </select>
             </div>
             <div>
               <label style={labelStyle}>Status</label>
-              <select className="input-field" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+              <select style={inputStyle(false)} value={form.status}
+                onChange={e => setForm({ ...form, status: e.target.value })}>
                 <option value="planned">Zaplanowany</option>
                 <option value="played">Rozegrany</option>
               </select>
@@ -133,7 +173,7 @@ export default function Schedule() {
             <button className="btn-gold" onClick={handleSave} disabled={saving}>
               {saving ? 'Zapisuję...' : editId ? 'Zapisz zmiany' : 'Dodaj mecz'}
             </button>
-            <button className="btn-ghost" onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm) }}>Anuluj</button>
+            <button className="btn-ghost" onClick={() => { setShowForm(false); setEditId(null); setForm(emptyForm); setErrors({}) }}>Anuluj</button>
           </div>
         </div>
       )}
@@ -154,7 +194,7 @@ export default function Schedule() {
       {loading ? (
         <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>Ładowanie...</div>
       ) : filtered.length === 0 ? (
-        <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>Brak meczów w bieżącym sezonie</div>
+        <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', letterSpacing: 2 }}>Brak meczów</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {filtered.map((match, i) => {
@@ -163,20 +203,27 @@ export default function Schedule() {
             const isPlayed = match.status === 'played'
             const usF = match.score_us_extra ?? match.score_us
             const themF = match.score_them_extra ?? match.score_them
+            const win = usF > themF
+            const draw = usF === themF
+            // Kolor paska — główna zmiana wizualna
+            const barColor = !isPlayed ? 'var(--black-border)'
+              : win ? '#4ade80' : draw ? 'var(--gold)' : 'var(--red-light)'
+            const isQuickEditing = quickEditId === match.id
 
             return (
               <div key={match.id} className="card" style={{
                 padding: '16px 20px', display: 'flex', alignItems: 'center',
-                gap: 16, flexWrap: 'wrap',
-                borderLeft: isPlayed ? '3px solid var(--black-border)' : '3px solid var(--red)',
+                gap: 12, flexWrap: 'wrap',
+                borderLeft: `4px solid ${barColor}`,
                 animation: `fadeIn 0.3s ease ${i * 0.04}s both`,
+                transition: 'border-color 0.3s',
               }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--white-muted)', minWidth: 32, textAlign: 'center' }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--white-muted)', minWidth: 28, textAlign: 'center' }}>
                   {i + 1}
                 </div>
-                <div style={{ minWidth: 100 }}>
-                  <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 15, fontWeight: 600 }}>{date}</div>
-                  {time && <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)' }}>{time}</div>}
+                <div style={{ minWidth: 95 }}>
+                  <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, fontWeight: 600 }}>{date}</div>
+                  {time && <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, color: 'var(--white-muted)' }}>{time}</div>}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <span className={match.competition === 'puchar' ? 'badge-puchar' : 'badge-liga'}>
@@ -186,31 +233,76 @@ export default function Schedule() {
                     {match.is_home ? 'Dom' : 'Wyjazd'}
                   </span>
                 </div>
-                <div style={{ flex: 1, fontFamily: 'var(--font-condensed)', fontSize: 17, fontWeight: 700 }}>
+                <div style={{ flex: 1, fontFamily: 'var(--font-condensed)', fontSize: 16, fontWeight: 700 }}>
                   PAF Płońsk <span style={{ color: 'var(--white-muted)', fontWeight: 400 }}>vs</span> {match.opponent}
                 </div>
-                {isPlayed && match.score_us !== null && (
-                  <div style={{
-                    fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: 2,
-                    color: usF > themF ? '#4ade80' : usF < themF ? 'var(--red-light)' : 'var(--white-dim)',
-                  }}>
+
+                {/* Wynik — klikalny dla admina */}
+                {isPlayed && match.score_us !== null && !isQuickEditing && (
+                  <div
+                    onClick={() => isAdmin ? (setQuickEditId(match.id), setQuickScore({ us: match.score_us, them: match.score_them })) : null}
+                    style={{
+                      fontFamily: 'var(--font-display)', fontSize: 24, letterSpacing: 2,
+                      color: win ? '#4ade80' : draw ? 'var(--gold)' : 'var(--red-light)',
+                      cursor: isAdmin ? 'pointer' : 'default',
+                      padding: isAdmin ? '2px 8px' : '0',
+                      border: isAdmin ? '1px solid transparent' : 'none',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { if (isAdmin) { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.background = '#1a1200' }}}
+                    onMouseLeave={e => { if (isAdmin) { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'transparent' }}}
+                    title={isAdmin ? 'Kliknij żeby edytować wynik' : ''}
+                  >
                     {match.score_us}:{match.score_them}
                     {match.score_us_extra !== null && match.score_us_extra !== undefined && (
-                      <span style={{ fontSize: 14, color: 'var(--gold)', marginLeft: 6 }}>
+                      <span style={{ fontSize: 13, color: 'var(--gold)', marginLeft: 6 }}>
                         ({match.extra_type === 'penalties' ? 'k' : 'd'}: {match.score_us_extra}:{match.score_them_extra})
                       </span>
                     )}
+                    {isAdmin && <span style={{ fontSize: 12, marginLeft: 6, opacity: 0.5 }}>✏️</span>}
                   </div>
                 )}
+
+                {/* Quick edit wynik */}
+                {isPlayed && isQuickEditing && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="number" min="0" value={quickScore.us}
+                      onChange={e => setQuickScore({ ...quickScore, us: e.target.value })}
+                      style={{ width: 52, background: '#222', border: `1px solid var(--gold)`, color: 'var(--white)', padding: '4px', fontSize: 20, textAlign: 'center', fontFamily: 'var(--font-display)', outline: 'none' }} />
+                    <span style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-display)', fontSize: 20 }}>:</span>
+                    <input type="number" min="0" value={quickScore.them}
+                      onChange={e => setQuickScore({ ...quickScore, them: e.target.value })}
+                      style={{ width: 52, background: '#222', border: `1px solid var(--gold)`, color: 'var(--white)', padding: '4px', fontSize: 20, textAlign: 'center', fontFamily: 'var(--font-display)', outline: 'none' }} />
+                    <button className="btn-gold" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => saveQuickScore(match)}>✓</button>
+                    <button className="btn-ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => setQuickEditId(null)}>✕</button>
+                  </div>
+                )}
+
                 {!isPlayed && (
-                  <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, letterSpacing: 2, color: 'var(--red)', textTransform: 'uppercase' }}>
+                  <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--red)', textTransform: 'uppercase' }}>
                     Zaplanowany
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: 8 }}>
+
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {/* Udostępnij */}
+                  <button
+                    onClick={() => copyMatchLink(match.id)}
+                    title="Kopiuj link do meczu"
+                    style={{
+                      fontFamily: 'var(--font-condensed)', fontSize: 12, fontWeight: 700,
+                      letterSpacing: 1, padding: '6px 10px',
+                      background: copiedLink === match.id ? '#0f2a0f' : 'var(--black-soft)',
+                      border: `1px solid ${copiedLink === match.id ? '#4ade80' : 'var(--black-border)'}`,
+                      color: copiedLink === match.id ? '#4ade80' : 'var(--white-muted)',
+                      cursor: 'pointer', transition: 'all 0.2s',
+                    }}
+                  >
+                    {copiedLink === match.id ? '✓' : '🔗'}
+                  </button>
                   <Link to={`/mecz/${match.id}`} style={{
                     fontFamily: 'var(--font-condensed)', fontSize: 13, fontWeight: 700,
-                    letterSpacing: 1, textTransform: 'uppercase', padding: '6px 14px',
+                    letterSpacing: 1, textTransform: 'uppercase', padding: '6px 12px',
                     background: 'var(--black-soft)', border: '1px solid var(--black-border)',
                     color: 'var(--white-dim)', transition: 'all 0.2s',
                   }}
@@ -221,8 +313,8 @@ export default function Schedule() {
                   </Link>
                   {isAdmin && (
                     <>
-                      <button className="btn-ghost" style={{ padding: '6px 12px', fontSize: 13 }} onClick={() => startEdit(match)}>✏️</button>
-                      <button className="btn-danger" style={{ padding: '6px 12px', fontSize: 13 }} onClick={() => handleDelete(match.id)}>🗑️</button>
+                      <button className="btn-ghost" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => startEdit(match)}>✏️</button>
+                      <button className="btn-danger" style={{ padding: '6px 10px', fontSize: 13 }} onClick={() => handleDelete(match.id)}>🗑️</button>
                     </>
                   )}
                 </div>

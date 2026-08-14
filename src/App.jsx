@@ -10,6 +10,7 @@ import Backup from './pages/Backup.jsx'
 import Table from './pages/Table.jsx'
 import History from './pages/History.jsx'
 import PlayerProfile from './pages/PlayerProfile.jsx'
+import NotFound from './pages/NotFound.jsx'
 
 export default function App() {
   return (
@@ -21,12 +22,13 @@ export default function App() {
           <Route path="/terminarz" element={<Schedule />} />
           <Route path="/mecz/:id" element={<MatchDetail />} />
           <Route path="/zawodnicy" element={<Players />} />
+          <Route path="/zawodnik/:id" element={<PlayerProfile />} />
           <Route path="/tabela" element={<Table />} />
           <Route path="/podsumowanie" element={<Summary />} />
           <Route path="/historia" element={<History />} />
-          <Route path="/zawodnik/:id" element={<PlayerProfile />} />
           <Route path="/admin" element={<LoginPage />} />
           <Route path="/backup" element={<Backup />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
       <footer style={{
