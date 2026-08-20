@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useTeam } from '../context/TeamContext.jsx'
 import { format, parseISO, differenceInDays, differenceInHours, differenceInMinutes } from 'date-fns'
 import { pl } from 'date-fns/locale'
 
@@ -58,7 +59,7 @@ function FormBadge({ result }) {
   )
 }
 
-function MatchCard({ match, label, accent, goals }) {
+function MatchCard({ match, label, accent, goals, teamName }) {
   if (!match) return (
     <div className="card" style={{ padding: 28, flex: 1, minWidth: 280 }}>
       <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, letterSpacing: 2, color: accent, textTransform: 'uppercase', marginBottom: 16 }}>{label}</div>
@@ -70,13 +71,11 @@ function MatchCard({ match, label, accent, goals }) {
   const isPlayed = match.status === 'played'
   const usF = match.score_us_extra ?? match.score_us
   const themF = match.score_them_extra ?? match.score_them
-  const matchGoals = (goals || []).filter(g => g.match_id === match.id)
+  const matchGoals = (goals || []).filter(g => g.match_id === match.id && !g.own_goal)
   const scorerCounts = {}
-  matchGoals.forEach(g => {
-    const name = g.players?.last_name || '?'
-    scorerCounts[name] = (scorerCounts[name] || 0) + 1
-  })
-  const scorerDisplay = Object.entries(scorerCounts).map(([n, c]) => c > 1 ? `${n} (${c})` : n).join(', ')
+  matchGoals.forEach(g => { const name = g.players?.last_name || '?'; scorerCounts[name] = (scorerCounts[name] || 0) + 1 })
+  const ownGoals = (goals || []).filter(g => g.match_id === match.id && g.own_goal).length
+  const scorerDisplay = [...Object.entries(scorerCounts).map(([n, c]) => c > 1 ? `${n} (${c})` : n), ...(ownGoals > 0 ? [`sam. (${ownGoals})`] : [])].join(', ')
 
   return (
     <Link to={`/mecz/${match.id}`} style={{ flex: 1, minWidth: 280 }}>
@@ -88,8 +87,8 @@ function MatchCard({ match, label, accent, goals }) {
           <span className={match.competition === 'puchar' ? 'badge-puchar' : 'badge-liga'}>{match.competition === 'puchar' ? 'Puchar' : 'Liga'}</span>
           <span className={match.is_home ? 'badge-home' : 'badge-away'}>{match.is_home ? 'Dom' : 'Wyjazd'}</span>
         </div>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(20px, 4vw, 28px)', letterSpacing: 2, marginBottom: 8 }}>
-          PAF Płońsk <span style={{ color: accent, margin: '0 8px' }}>vs</span> {match.opponent}
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(18px, 4vw, 26px)', letterSpacing: 2, marginBottom: 8 }}>
+          {teamName} <span style={{ color: accent, margin: '0 8px' }}>vs</span> {match.opponent}
         </div>
         {isPlayed && match.score_us !== null && (
           <>
@@ -98,14 +97,10 @@ function MatchCard({ match, label, accent, goals }) {
               <span style={{ color: 'var(--white-muted)', margin: '0 8px', fontSize: 32 }}>:</span>
               <span>{match.score_them}</span>
               {match.score_us_extra !== null && match.score_us_extra !== undefined && (
-                <span style={{ fontSize: 16, color: 'var(--gold)', marginLeft: 10 }}>
-                  ({match.extra_type === 'penalties' ? 'k' : 'd'}: {match.score_us_extra}:{match.score_them_extra})
-                </span>
+                <span style={{ fontSize: 16, color: 'var(--gold)', marginLeft: 10 }}>({match.extra_type === 'penalties' ? 'k' : 'd'}: {match.score_us_extra}:{match.score_them_extra})</span>
               )}
             </div>
-            {scorerDisplay && (
-              <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--gold)', letterSpacing: 1, marginBottom: 4 }}>⚽ {scorerDisplay}</div>
-            )}
+            {scorerDisplay && <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--gold)', letterSpacing: 1, marginBottom: 4 }}>⚽ {scorerDisplay}</div>}
           </>
         )}
         <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, color: 'var(--white-muted)', letterSpacing: 1, marginTop: 4 }}>
@@ -119,6 +114,7 @@ function MatchCard({ match, label, accent, goals }) {
 
 export default function Home() {
   const { isAdmin } = useAuth()
+  const { activeTeam, team } = useTeam()
   const [lastMatch, setLastMatch] = useState(null)
   const [nextMatch, setNextMatch] = useState(null)
   const [recentMatches, setRecentMatches] = useState([])
@@ -127,33 +123,40 @@ export default function Home() {
   const [goals, setGoals] = useState([])
   const [loading, setLoading] = useState(true)
   const [visits, setVisits] = useState(null)
+  const [teamPhoto, setTeamPhoto] = useState(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
   useEffect(() => {
     async function load() {
+      setLoading(true)
       const today = new Date().toISOString().split('T')[0]
-      const [{ data: played }, { data: planned }, { data: goalsData }] = await Promise.all([
-        supabase.from('matches').select('*').eq('status', 'played').is('season_id', null).order('match_date', { ascending: false }).limit(10),
-        supabase.from('matches').select('*').eq('status', 'planned').is('season_id', null).gte('match_date', today).order('match_date', { ascending: true }).limit(1),
+      const photoKey = `team_photo_${activeTeam}`
+
+      const [{ data: played }, { data: planned }, { data: goalsData }, { data: settings }] = await Promise.all([
+        supabase.from('matches').select('*').eq('status', 'played').eq('team', activeTeam).is('season_id', null).order('match_date', { ascending: false }).limit(10),
+        supabase.from('matches').select('*').eq('status', 'planned').eq('team', activeTeam).is('season_id', null).gte('match_date', today).order('match_date', { ascending: true }).limit(1),
         supabase.from('goals').select('*, players(last_name)'),
+        supabase.from('site_settings').select('*').eq('key', photoKey).maybeSingle(),
       ])
+
       setLastMatch(played?.[0] || null)
       setNextMatch(planned?.[0] || null)
       setRecentMatches((played || []).slice(1, 4))
       setGoals(goalsData || [])
+      setTeamPhoto(settings?.value || null)
+
       const last5 = (played || []).slice(0, 5).map(m => {
-        const usF = m.score_us_extra ?? m.score_us
-        const themF = m.score_them_extra ?? m.score_them
+        const usF = m.score_us_extra ?? m.score_us; const themF = m.score_them_extra ?? m.score_them
         if (usF === null) return null
         return usF > themF ? 'W' : usF < themF ? 'P' : 'R'
       }).filter(Boolean)
       setForm(last5)
+
       let s = 0
       for (const m of (played || [])) {
-        const usF = m.score_us_extra ?? m.score_us
-        const themF = m.score_them_extra ?? m.score_them
+        const usF = m.score_us_extra ?? m.score_us; const themF = m.score_them_extra ?? m.score_them
         if (usF === null) break
-        if (usF >= themF) s++
-        else break
+        if (usF >= themF) s++; else break
       }
       setStreak(s)
       setLoading(false)
@@ -161,22 +164,52 @@ export default function Home() {
       setVisits(count)
     }
     load()
-  }, [])
+  }, [activeTeam])
+
+  async function uploadTeamPhoto(file) {
+    if (!file) return
+    setUploadingPhoto(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `team-photo-${activeTeam}.${ext}`
+      await supabase.storage.from('player-photos').remove([path])
+      const { error } = await supabase.storage.from('player-photos').upload(path, file, { upsert: true })
+      if (error) throw error
+      const { data: urlData } = supabase.storage.from('player-photos').getPublicUrl(path)
+      const photoUrl = urlData.publicUrl + '?t=' + Date.now()
+      const photoKey = `team_photo_${activeTeam}`
+      const { data: existing } = await supabase.from('site_settings').select('*').eq('key', photoKey).maybeSingle()
+      if (existing) {
+        await supabase.from('site_settings').update({ value: photoUrl }).eq('key', photoKey)
+      } else {
+        await supabase.from('site_settings').insert({ key: photoKey, value: photoUrl })
+      }
+      setTeamPhoto(photoUrl)
+    } catch (err) { alert('Błąd uploadu: ' + err.message) }
+    setUploadingPhoto(false)
+  }
+
+  async function removeTeamPhoto() {
+    if (!confirm('Usunąć zdjęcie drużyny?')) return
+    const photoKey = `team_photo_${activeTeam}`
+    await supabase.from('site_settings').delete().eq('key', photoKey)
+    setTeamPhoto(null)
+  }
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '48px 20px' }} className="fade-in">
       {/* Hero */}
-      <div style={{ textAlign: 'center', marginBottom: 48 }}>
-        <img src="/logo.png" alt="PAF Płońsk" style={{ height: 110, marginBottom: 20 }} />
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 8vw, 68px)', letterSpacing: 4, lineHeight: 1, marginBottom: 12 }}>
-          FANPAGE PAF <span style={{ color: 'var(--gold)' }}>PŁOŃSK</span>
+      <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <img src="/logo.png" alt="PAF Płońsk" style={{ height: 100, marginBottom: 16 }} />
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(28px, 7vw, 60px)', letterSpacing: 4, lineHeight: 1, marginBottom: 8 }}>
+          FANPAGE <span style={{ color: team.color }}>{team.short}</span>
         </h1>
-        <p style={{ fontFamily: 'var(--font-condensed)', fontSize: 15, letterSpacing: 3, color: 'var(--white-muted)', textTransform: 'uppercase' }}>
-          Statystyki • Terminarz • Zawodnicy
-        </p>
-        <div style={{ width: 64, height: 3, background: 'var(--red)', margin: '16px auto 0' }} />
+        <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, letterSpacing: 3, color: 'var(--white-muted)', textTransform: 'uppercase' }}>
+          {team.name} • Statystyki • Terminarz • Zawodnicy
+        </div>
+        <div style={{ width: 64, height: 3, background: team.color, margin: '14px auto 0' }} />
         {isAdmin && visits !== null && (
-          <div style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', gap: 8, background: 'var(--black-card)', border: '1px solid var(--black-border)', padding: '6px 16px' }}>
+          <div style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 8, background: 'var(--black-card)', border: '1px solid var(--black-border)', padding: '6px 16px' }}>
             <span style={{ fontSize: 14 }}>👁️</span>
             <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase' }}>Odwiedziny:</span>
             <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--gold)', letterSpacing: 2 }}>{visits.toLocaleString('pl-PL')}</span>
@@ -184,66 +217,90 @@ export default function Home() {
         )}
       </div>
 
-      {/* Forma + seria */}
-      {!loading && (form.length > 0 || streak !== null) && (
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 28, alignItems: 'center' }}>
-          {form.length > 0 && (
-            <div className="card" style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase' }}>Forma</div>
-              <div style={{ display: 'flex', gap: 4 }}>{[...form].reverse().map((r, i) => <FormBadge key={i} result={r} />)}</div>
+      {/* Zdjęcie drużyny */}
+      {(teamPhoto || isAdmin) && (
+        <div style={{ marginBottom: 36, position: 'relative' }}>
+          {teamPhoto ? (
+            <div style={{ position: 'relative' }}>
+              <img src={teamPhoto} alt={`Zdjęcie ${team.name}`} style={{ width: '100%', maxHeight: 380, objectFit: 'cover', border: `2px solid ${team.color}`, display: 'block' }} />
+              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(0,0,0,0.8))', padding: '24px 20px 12px' }}>
+                <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, letterSpacing: 3, color: team.color, textTransform: 'uppercase' }}>
+                  {team.name} — Sezon {new Date().getFullYear()}
+                </div>
+              </div>
+              {isAdmin && (
+                <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6 }}>
+                  <label style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid ${team.color}`, color: team.color, fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', padding: '5px 10px', cursor: 'pointer' }}>
+                    📷 Zmień
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadTeamPhoto(e.target.files[0])} disabled={uploadingPhoto} />
+                  </label>
+                  <button onClick={removeTeamPhoto} style={{ background: 'rgba(0,0,0,0.7)', border: '1px solid var(--red)', color: 'var(--red-light)', fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 11, padding: '5px 10px', cursor: 'pointer' }}>🗑️</button>
+                </div>
+              )}
             </div>
+          ) : isAdmin && (
+            <label style={{ display: 'block', border: '2px dashed var(--black-border)', padding: 28, textAlign: 'center', cursor: uploadingPhoto ? 'not-allowed' : 'pointer', transition: 'border-color 0.2s' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = team.color}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--black-border)'}
+            >
+              <div style={{ fontSize: 36, marginBottom: 10 }}>📷</div>
+              <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+                {uploadingPhoto ? 'Wgrywam...' : `Dodaj zdjęcie ${team.name}`}
+              </div>
+              <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, color: '#555', letterSpacing: 1 }}>Kliknij żeby wybrać zdjęcie</div>
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadTeamPhoto(e.target.files[0])} disabled={uploadingPhoto} />
+            </label>
           )}
-          {streak !== null && streak > 0 && (
+        </div>
+      )}
+
+      {/* Forma */}
+      {!loading && form.length > 0 && (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 28, alignItems: 'center' }}>
+          <div className="card" style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase' }}>Forma</div>
+            <div style={{ display: 'flex', gap: 4 }}>{[...form].reverse().map((r, i) => <FormBadge key={i} result={r} />)}</div>
+          </div>
+          {streak !== null && (
             <div className="card" style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase' }}>Seria bez porażki</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: '#4ade80', letterSpacing: 1 }}>
-                {streak} {streak === 1 ? 'mecz' : streak < 5 ? 'mecze' : 'meczów'}
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: streak > 0 ? '#4ade80' : 'var(--red-light)', letterSpacing: 1 }}>
+                {streak > 0 ? `${streak} ${streak === 1 ? 'mecz' : streak < 5 ? 'mecze' : 'meczów'}` : '—'}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Główne karty */}
+      {/* Mecze */}
       {loading ? (
         <div style={{ textAlign: 'center', color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', fontSize: 18, letterSpacing: 2 }}>Ładowanie...</div>
       ) : (
         <>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 20 }}>
-            <MatchCard match={lastMatch} label="Ostatni mecz" accent="var(--gold)" goals={goals} />
-            <MatchCard match={nextMatch} label="Następny mecz" accent="var(--red)" goals={goals} />
+            <MatchCard match={lastMatch} label="Ostatni mecz" accent="var(--gold)" goals={goals} teamName={team.name} />
+            <MatchCard match={nextMatch} label="Następny mecz" accent={team.color} goals={goals} teamName={team.name} />
           </div>
 
-          {/* Ostatnie 3 mecze */}
           {recentMatches.length > 0 && (
             <div style={{ marginBottom: 32 }}>
-              <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, letterSpacing: 3, color: 'var(--white-muted)', textTransform: 'uppercase', marginBottom: 10 }}>
-                Poprzednie mecze
-              </div>
+              <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, letterSpacing: 3, color: 'var(--white-muted)', textTransform: 'uppercase', marginBottom: 10 }}>Poprzednie mecze</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {recentMatches.map(m => {
-                  const usF = m.score_us_extra ?? m.score_us
-                  const themF = m.score_them_extra ?? m.score_them
-                  const win = usF > themF
-                  const draw = usF === themF
+                  const usF = m.score_us_extra ?? m.score_us; const themF = m.score_them_extra ?? m.score_them
+                  const win = usF > themF; const draw = usF === themF
                   const result = win ? 'W' : draw ? 'R' : 'P'
                   const color = win ? '#4ade80' : draw ? 'var(--gold)' : 'var(--red-light)'
                   return (
                     <Link key={m.id} to={`/mecz/${m.id}`} style={{ flex: 1, minWidth: 120, textDecoration: 'none' }}>
-                      <div className="card" style={{
-                        padding: '12px 14px', borderTop: `3px solid ${color}`,
-                        transition: 'transform 0.15s, box-shadow 0.15s', cursor: 'pointer',
-                      }}
-                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.3)' }}
-                        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
-                      >
+                      <div className="card" style={{ padding: '12px 14px', borderTop: `3px solid ${color}`, transition: 'transform 0.15s', cursor: 'pointer' }}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 900, color, letterSpacing: 1 }}>{result}</div>
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color, letterSpacing: 1 }}>{result}</div>
                           <div style={{ fontSize: 10, color: 'var(--white-muted)', letterSpacing: 1 }}>{m.is_home ? 'DOM' : 'WYJ'}</div>
                         </div>
-                        <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, color: 'var(--white-dim)', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {m.opponent}
-                        </div>
+                        <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, color: 'var(--white-dim)', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.opponent}</div>
                         <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color }}>{m.score_us}:{m.score_them}</div>
                       </div>
                     </Link>
@@ -255,7 +312,6 @@ export default function Home() {
         </>
       )}
 
-      {/* Quick links */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <Link to="/terminarz" className="btn-primary" style={{ padding: '12px 28px' }}>📅 Terminarz</Link>
         <Link to="/tabela" className="btn-ghost" style={{ padding: '12px 28px' }}>📊 Tabela</Link>

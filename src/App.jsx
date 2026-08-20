@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import Navbar from './components/Navbar.jsx'
+import TeamSwitcher from './components/TeamSwitcher.jsx'
 import Home from './pages/Home.jsx'
 import Schedule from './pages/Schedule.jsx'
 import MatchDetail from './pages/MatchDetail.jsx'
@@ -15,6 +16,7 @@ import NotFound from './pages/NotFound.jsx'
 export default function App() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <TeamSwitcher />
       <Navbar />
       <main style={{ flex: 1 }}>
         <Routes>
