@@ -5,12 +5,13 @@ import Home from './pages/Home.jsx'
 import Schedule from './pages/Schedule.jsx'
 import MatchDetail from './pages/MatchDetail.jsx'
 import Players from './pages/Players.jsx'
+import PlayerProfile from './pages/PlayerProfile.jsx'
 import Summary from './pages/Summary.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import Backup from './pages/Backup.jsx'
 import Table from './pages/Table.jsx'
 import History from './pages/History.jsx'
-import PlayerProfile from './pages/PlayerProfile.jsx'
+import Interviews from './pages/Interviews.jsx'
 import NotFound from './pages/NotFound.jsx'
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/tabela" element={<Table />} />
           <Route path="/podsumowanie" element={<Summary />} />
           <Route path="/historia" element={<History />} />
+          <Route path="/wywiady" element={<Interviews />} />
           <Route path="/admin" element={<LoginPage />} />
           <Route path="/backup" element={<Backup />} />
           <Route path="*" element={<NotFound />} />
