@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
+import { uploadToCloudinary } from '../lib/cloudinary.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useTeam } from '../context/TeamContext.jsx'
 import { format, parseISO, differenceInDays, differenceInHours, differenceInMinutes } from 'date-fns'
@@ -131,27 +132,23 @@ export default function Home() {
       setLoading(true)
       const today = new Date().toISOString().split('T')[0]
       const photoKey = `team_photo_${activeTeam}`
-
       const [{ data: played }, { data: planned }, { data: goalsData }, { data: settings }] = await Promise.all([
         supabase.from('matches').select('*').eq('status', 'played').eq('team', activeTeam).is('season_id', null).order('match_date', { ascending: false }).limit(10),
         supabase.from('matches').select('*').eq('status', 'planned').eq('team', activeTeam).is('season_id', null).gte('match_date', today).order('match_date', { ascending: true }).limit(1),
         supabase.from('goals').select('*, players(last_name)'),
         supabase.from('site_settings').select('*').eq('key', photoKey).maybeSingle(),
       ])
-
       setLastMatch(played?.[0] || null)
       setNextMatch(planned?.[0] || null)
       setRecentMatches((played || []).slice(1, 4))
       setGoals(goalsData || [])
       setTeamPhoto(settings?.value || null)
-
       const last5 = (played || []).slice(0, 5).map(m => {
         const usF = m.score_us_extra ?? m.score_us; const themF = m.score_them_extra ?? m.score_them
         if (usF === null) return null
         return usF > themF ? 'W' : usF < themF ? 'P' : 'R'
       }).filter(Boolean)
       setForm(last5)
-
       let s = 0
       for (const m of (played || [])) {
         const usF = m.score_us_extra ?? m.score_us; const themF = m.score_them_extra ?? m.score_them
@@ -170,21 +167,16 @@ export default function Home() {
     if (!file) return
     setUploadingPhoto(true)
     try {
-      const ext = file.name.split('.').pop()
-      const path = `team-photo-${activeTeam}.${ext}`
-      await supabase.storage.from('player-photos').remove([path])
-      const { error } = await supabase.storage.from('player-photos').upload(path, file, { upsert: true })
-      if (error) throw error
-      const { data: urlData } = supabase.storage.from('player-photos').getPublicUrl(path)
-      const photoUrl = urlData.publicUrl + '?t=' + Date.now()
+      const publicId = `paf-team/team-photo-${activeTeam}`
+      const url = await uploadToCloudinary(file, publicId)
       const photoKey = `team_photo_${activeTeam}`
       const { data: existing } = await supabase.from('site_settings').select('*').eq('key', photoKey).maybeSingle()
       if (existing) {
-        await supabase.from('site_settings').update({ value: photoUrl }).eq('key', photoKey)
+        await supabase.from('site_settings').update({ value: url }).eq('key', photoKey)
       } else {
-        await supabase.from('site_settings').insert({ key: photoKey, value: photoUrl })
+        await supabase.from('site_settings').insert({ key: photoKey, value: url })
       }
-      setTeamPhoto(photoUrl)
+      setTeamPhoto(url)
     } catch (err) { alert('Błąd uploadu: ' + err.message) }
     setUploadingPhoto(false)
   }
@@ -198,7 +190,6 @@ export default function Home() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '48px 20px' }} className="fade-in">
-      {/* Hero */}
       <div style={{ textAlign: 'center', marginBottom: 40 }}>
         <img src="/logo.png" alt="PAF Płońsk" style={{ height: 100, marginBottom: 16 }} />
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(28px, 7vw, 60px)', letterSpacing: 4, lineHeight: 1, marginBottom: 8 }}>
@@ -230,8 +221,8 @@ export default function Home() {
               </div>
               {isAdmin && (
                 <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6 }}>
-                  <label style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid ${team.color}`, color: team.color, fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', padding: '5px 10px', cursor: 'pointer' }}>
-                    📷 Zmień
+                  <label style={{ background: 'rgba(0,0,0,0.7)', border: `1px solid ${team.color}`, color: team.color, fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', padding: '5px 10px', cursor: uploadingPhoto ? 'not-allowed' : 'pointer' }}>
+                    {uploadingPhoto ? '⏳ Wgrywam...' : '📷 Zmień'}
                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadTeamPhoto(e.target.files[0])} disabled={uploadingPhoto} />
                   </label>
                   <button onClick={removeTeamPhoto} style={{ background: 'rgba(0,0,0,0.7)', border: '1px solid var(--red)', color: 'var(--red-light)', fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 11, padding: '5px 10px', cursor: 'pointer' }}>🗑️</button>
@@ -245,7 +236,7 @@ export default function Home() {
             >
               <div style={{ fontSize: 36, marginBottom: 10 }}>📷</div>
               <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 14, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
-                {uploadingPhoto ? 'Wgrywam...' : `Dodaj zdjęcie ${team.name}`}
+                {uploadingPhoto ? '⏳ Wgrywam...' : `Dodaj zdjęcie ${team.name}`}
               </div>
               <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, color: '#555', letterSpacing: 1 }}>Kliknij żeby wybrać zdjęcie</div>
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadTeamPhoto(e.target.files[0])} disabled={uploadingPhoto} />
@@ -272,7 +263,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Mecze */}
       {loading ? (
         <div style={{ textAlign: 'center', color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', fontSize: 18, letterSpacing: 2 }}>Ładowanie...</div>
       ) : (
@@ -281,7 +271,6 @@ export default function Home() {
             <MatchCard match={lastMatch} label="Ostatni mecz" accent="var(--gold)" goals={goals} teamName={team.name} />
             <MatchCard match={nextMatch} label="Następny mecz" accent={team.color} goals={goals} teamName={team.name} />
           </div>
-
           {recentMatches.length > 0 && (
             <div style={{ marginBottom: 32 }}>
               <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, letterSpacing: 3, color: 'var(--white-muted)', textTransform: 'uppercase', marginBottom: 10 }}>Poprzednie mecze</div>
@@ -293,12 +282,12 @@ export default function Home() {
                   const color = win ? '#4ade80' : draw ? 'var(--gold)' : 'var(--red-light)'
                   return (
                     <Link key={m.id} to={`/mecz/${m.id}`} style={{ flex: 1, minWidth: 120, textDecoration: 'none' }}>
-                      <div className="card" style={{ padding: '12px 14px', borderTop: `3px solid ${color}`, transition: 'transform 0.15s', cursor: 'pointer' }}
+                      <div className="card" style={{ padding: '12px 14px', borderTop: `3px solid ${color}`, transition: 'transform 0.15s' }}
                         onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
                         onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color, letterSpacing: 1 }}>{result}</div>
-                          <div style={{ fontSize: 10, color: 'var(--white-muted)', letterSpacing: 1 }}>{m.is_home ? 'DOM' : 'WYJ'}</div>
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color }}>{result}</div>
+                          <div style={{ fontSize: 10, color: 'var(--white-muted)' }}>{m.is_home ? 'DOM' : 'WYJ'}</div>
                         </div>
                         <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, color: 'var(--white-dim)', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.opponent}</div>
                         <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color }}>{m.score_us}:{m.score_them}</div>

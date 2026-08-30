@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { uploadToCloudinary } from '../lib/cloudinary.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useTeam } from '../context/TeamContext.jsx'
 import { useNavigate } from 'react-router-dom'
@@ -62,13 +63,9 @@ export default function Players() {
     if (!file) return
     setUploadingPhoto(player.id)
     try {
-      const ext = file.name.split('.').pop()
-      const path = `${player.id}.${ext}`
-      await supabase.storage.from('player-photos').remove([path])
-      const { error } = await supabase.storage.from('player-photos').upload(path, file, { upsert: true })
-      if (error) throw error
-      const { data: urlData } = supabase.storage.from('player-photos').getPublicUrl(path)
-      await supabase.from('players').update({ photo_url: urlData.publicUrl + '?t=' + Date.now() }).eq('id', player.id)
+      const publicId = `paf-players/${player.id}`
+      const url = await uploadToCloudinary(file, publicId)
+      await supabase.from('players').update({ photo_url: url }).eq('id', player.id)
       await loadPlayers()
     } catch (err) { alert('Błąd uploadu: ' + err.message) }
     setUploadingPhoto(null)
@@ -76,8 +73,6 @@ export default function Players() {
 
   async function removePhoto(player) {
     if (!confirm('Usunąć zdjęcie?')) return
-    const ext = player.photo_url?.split('.').pop()?.split('?')[0]
-    if (ext) await supabase.storage.from('player-photos').remove([`${player.id}.${ext}`])
     await supabase.from('players').update({ photo_url: null }).eq('id', player.id)
     await loadPlayers()
   }
@@ -93,53 +88,51 @@ export default function Players() {
     const isEditing = editingPlayer === player.id
     const isUploading = uploadingPhoto === player.id
     return (
-      <div>
-        <div className="card" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, borderLeft: '3px solid transparent', transition: 'all 0.2s' }}>
-          <div style={{ position: 'relative', flexShrink: 0 }}>
-            {player.photo_url ? (
-              <img src={player.photo_url} alt={`${player.last_name}`} style={{ width: 48, height: 48, objectFit: 'cover', border: `2px solid ${team.color}`, cursor: 'pointer' }} onClick={() => navigate(`/zawodnik/${player.id}`)} />
-            ) : (
-              <div style={{ width: 48, height: 48, background: player.active ? team.color : 'var(--black-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontSize: player.shirt_number ? 18 : 14, color: 'var(--white)', cursor: 'pointer' }} onClick={() => navigate(`/zawodnik/${player.id}`)}>
-                {player.shirt_number || `${player.last_name[0]}${player.first_name[0]}`}
-              </div>
-            )}
-            {isAdmin && (
-              <label style={{ position: 'absolute', bottom: -4, right: -4, width: 18, height: 18, background: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 10, borderRadius: '50%', border: '1px solid var(--black)' }}>
-                {isUploading ? '⏳' : '📷'}
-                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadPhoto(player, e.target.files[0])} disabled={isUploading} />
-              </label>
-            )}
-          </div>
-
-          {isEditing ? (
-            <div style={{ flex: 1, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input className="input-field" value={editForm.first_name} onChange={e => setEditForm({ ...editForm, first_name: e.target.value })} placeholder="Imię" style={{ width: 120, padding: '6px 10px', fontSize: 14 }} />
-              <input className="input-field" value={editForm.last_name} onChange={e => setEditForm({ ...editForm, last_name: e.target.value })} placeholder="Nazwisko" style={{ width: 140, padding: '6px 10px', fontSize: 14 }} />
-              <input className="input-field" type="number" value={editForm.shirt_number} onChange={e => setEditForm({ ...editForm, shirt_number: e.target.value })} placeholder="Nr" style={{ width: 70, padding: '6px 10px', fontSize: 14 }} />
-              <button className="btn-gold" style={{ padding: '6px 14px', fontSize: 13 }} onClick={saveEdit} disabled={saving}>{saving ? '...' : 'Zapisz'}</button>
-              <button className="btn-ghost" style={{ padding: '6px 12px', fontSize: 13 }} onClick={() => setEditingPlayer(null)}>Anuluj</button>
-            </div>
+      <div className="card" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.2s' }}>
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          {player.photo_url ? (
+            <img src={player.photo_url} alt={player.last_name} style={{ width: 48, height: 48, objectFit: 'cover', border: `2px solid ${team.color}`, cursor: 'pointer' }} onClick={() => navigate(`/zawodnik/${player.id}`)} />
           ) : (
-            <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => navigate(`/zawodnik/${player.id}`)}>
-              <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 16, fontWeight: 700 }}>
-                {player.last_name} {player.first_name}
-                {player.shirt_number && <span style={{ marginLeft: 8, fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', fontWeight: 400 }}>#{player.shirt_number}</span>}
-              </div>
-              {!player.active && <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--white-muted)', letterSpacing: 1 }}>NIEAKTYWNY</div>}
+            <div style={{ width: 48, height: 48, background: player.active ? team.color : 'var(--black-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-display)', fontSize: player.shirt_number ? 18 : 14, color: 'var(--white)', cursor: 'pointer' }} onClick={() => navigate(`/zawodnik/${player.id}`)}>
+              {player.shirt_number || `${player.last_name[0]}${player.first_name[0]}`}
             </div>
           )}
-
-          {isAdmin && !isEditing && (
-            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-              {player.photo_url && <button className="btn-danger" style={{ padding: '5px 8px', fontSize: 11 }} onClick={() => removePhoto(player)}>🗑️📷</button>}
-              <button style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, fontWeight: 700, padding: '5px 10px', background: 'transparent', border: '1px solid #333', color: 'var(--white-muted)', cursor: 'pointer' }}
-                onClick={() => { setEditingPlayer(player.id); setEditForm({ first_name: player.first_name, last_name: player.last_name, shirt_number: player.shirt_number || '' }) }}>✏️ Edytuj</button>
-              <button style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, fontWeight: 700, padding: '5px 10px', background: 'transparent', border: `1px solid ${player.active ? '#4ade8044' : '#4ade80'}`, color: player.active ? 'var(--white-muted)' : '#4ade80', cursor: 'pointer' }}
-                onClick={() => toggleActive(player)}>{player.active ? 'Dezaktywuj' : 'Aktywuj'}</button>
-              <button className="btn-danger" style={{ padding: '5px 10px', fontSize: 12 }} onClick={() => deletePlayer(player.id)}>🗑️</button>
-            </div>
+          {isAdmin && (
+            <label style={{ position: 'absolute', bottom: -4, right: -4, width: 18, height: 18, background: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 10, borderRadius: '50%', border: '1px solid var(--black)' }}>
+              {isUploading ? '⏳' : '📷'}
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadPhoto(player, e.target.files[0])} disabled={isUploading} />
+            </label>
           )}
         </div>
+
+        {isEditing ? (
+          <div style={{ flex: 1, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input className="input-field" value={editForm.first_name} onChange={e => setEditForm({ ...editForm, first_name: e.target.value })} placeholder="Imię" style={{ width: 120, padding: '6px 10px', fontSize: 14 }} />
+            <input className="input-field" value={editForm.last_name} onChange={e => setEditForm({ ...editForm, last_name: e.target.value })} placeholder="Nazwisko" style={{ width: 140, padding: '6px 10px', fontSize: 14 }} />
+            <input className="input-field" type="number" value={editForm.shirt_number} onChange={e => setEditForm({ ...editForm, shirt_number: e.target.value })} placeholder="Nr" style={{ width: 70, padding: '6px 10px', fontSize: 14 }} />
+            <button className="btn-gold" style={{ padding: '6px 14px', fontSize: 13 }} onClick={saveEdit} disabled={saving}>{saving ? '...' : 'Zapisz'}</button>
+            <button className="btn-ghost" style={{ padding: '6px 12px', fontSize: 13 }} onClick={() => setEditingPlayer(null)}>Anuluj</button>
+          </div>
+        ) : (
+          <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => navigate(`/zawodnik/${player.id}`)}>
+            <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 16, fontWeight: 700 }}>
+              {player.last_name} {player.first_name}
+              {player.shirt_number && <span style={{ marginLeft: 8, fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', fontWeight: 400 }}>#{player.shirt_number}</span>}
+            </div>
+            {!player.active && <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--white-muted)', letterSpacing: 1 }}>NIEAKTYWNY</div>}
+          </div>
+        )}
+
+        {isAdmin && !isEditing && (
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            {player.photo_url && <button className="btn-danger" style={{ padding: '5px 8px', fontSize: 11 }} onClick={() => removePhoto(player)}>🗑️📷</button>}
+            <button style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, fontWeight: 700, padding: '5px 10px', background: 'transparent', border: '1px solid #333', color: 'var(--white-muted)', cursor: 'pointer' }}
+              onClick={() => { setEditingPlayer(player.id); setEditForm({ first_name: player.first_name, last_name: player.last_name, shirt_number: player.shirt_number || '' }) }}>✏️ Edytuj</button>
+            <button style={{ fontFamily: 'var(--font-condensed)', fontSize: 12, fontWeight: 700, padding: '5px 10px', background: 'transparent', border: `1px solid ${player.active ? '#4ade8044' : '#4ade80'}`, color: player.active ? 'var(--white-muted)' : '#4ade80', cursor: 'pointer' }}
+              onClick={() => toggleActive(player)}>{player.active ? 'Dezaktywuj' : 'Aktywuj'}</button>
+            <button className="btn-danger" style={{ padding: '5px 10px', fontSize: 12 }} onClick={() => deletePlayer(player.id)}>🗑️</button>
+          </div>
+        )}
       </div>
     )
   }
@@ -167,7 +160,6 @@ export default function Players() {
         </div>
       )}
 
-      {/* Wyszukiwarka */}
       <input
         value={search} onChange={e => setSearch(e.target.value)}
         placeholder="🔍 Szukaj zawodnika..."
@@ -184,10 +176,12 @@ export default function Players() {
             {active.length === 0 ? <div style={{ color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', padding: '16px 0' }}>Brak zawodników</div>
               : active.map(p => <PlayerCard key={p.id} player={p} />)}
           </div>
-          {inactive.length > 0 && <>
-            <div style={{ marginBottom: 4, fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase' }}>Nieaktywni ({inactive.length})</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>{inactive.map(p => <PlayerCard key={p.id} player={p} />)}</div>
-          </>}
+          {inactive.length > 0 && (
+            <>
+              <div style={{ marginBottom: 4, fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase' }}>Nieaktywni ({inactive.length})</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>{inactive.map(p => <PlayerCard key={p.id} player={p} />)}</div>
+            </>
+          )}
         </>
       )}
     </div>
