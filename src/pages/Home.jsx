@@ -108,6 +108,11 @@ function MatchCard({ match, label, accent, goals, teamName }) {
           {date}{time && ` • ${time}`}
         </div>
         {!isPlayed && <Countdown match={match} />}
+        {!isPlayed && (
+  <Link to="/typowanie" style={{ display: 'inline-block', marginTop: 12, background: 'var(--gold)', color: 'var(--black)', fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', padding: '8px 18px', textDecoration: 'none' }}>
+    🎯 Wytypuj wynik
+  </Link>
+)}
       </div>
     </Link>
   )
