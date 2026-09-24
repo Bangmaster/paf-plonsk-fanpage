@@ -12,6 +12,7 @@ import Backup from './pages/Backup.jsx'
 import Table from './pages/Table.jsx'
 import History from './pages/History.jsx'
 import Interviews from './pages/Interviews.jsx'
+import Predictions from './pages/Predictions.jsx'
 import NotFound from './pages/NotFound.jsx'
 
 export default function App() {
@@ -30,15 +31,13 @@ export default function App() {
           <Route path="/podsumowanie" element={<Summary />} />
           <Route path="/historia" element={<History />} />
           <Route path="/wywiady" element={<Interviews />} />
+          <Route path="/typowanie" element={<Predictions />} />
           <Route path="/admin" element={<LoginPage />} />
           <Route path="/backup" element={<Backup />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
-      <footer style={{
-        borderTop: '1px solid #2a2a2a', padding: '20px', textAlign: 'center',
-        color: '#555', fontFamily: 'var(--font-condensed)', fontSize: '13px', letterSpacing: '1px'
-      }}>
+      <footer style={{ borderTop: '1px solid #2a2a2a', padding: '20px', textAlign: 'center', color: '#555', fontFamily: 'var(--font-condensed)', fontSize: '13px', letterSpacing: '1px' }}>
         FANPAGE PAF PŁOŃSK © {new Date().getFullYear()}
       </footer>
     </div>
