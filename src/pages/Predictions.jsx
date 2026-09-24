@@ -33,9 +33,15 @@ export default function Predictions() {
   const [ranking, setRanking] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('typuj')
+
+  // Odczytaj nick, pinHash i stan logowania z localStorage
   const [nick, setNick] = useState(() => localStorage.getItem('paf_nick') || '')
   const [pin, setPin] = useState('')
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [pinHash, setPinHash] = useState(() => localStorage.getItem('paf_pin_hash') || '')
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return !!(localStorage.getItem('paf_nick') && localStorage.getItem('paf_pin_hash'))
+  })
+
   const [loginError, setLoginError] = useState('')
   const [registerMode, setRegisterMode] = useState(false)
   const [pinConfirm, setPinConfirm] = useState('')
@@ -52,6 +58,7 @@ export default function Predictions() {
     ])
     setMatches(m || [])
     setPredictions(p || [])
+
     const matchMap = {}
     ;(m || []).forEach(match => { matchMap[match.id] = match })
     const nickPoints = {}
@@ -81,17 +88,43 @@ export default function Predictions() {
   function handleLogin() {
     if (!nick.trim() || !pin.trim()) { setLoginError('Wpisz nick i PIN'); return }
     if (pin.length < 4) { setLoginError('PIN musi mieć minimum 4 cyfry'); return }
+
     const existingPreds = predictions.filter(p => p.nick.toLowerCase() === nick.toLowerCase())
+    const inputHash = hashPin(nick.trim(), pin)
+
     if (existingPreds.length === 0) {
+      // Nowy nick
       if (!registerMode) { setRegisterMode(true); setLoginError(''); return }
       if (pin !== pinConfirm) { setLoginError('PINy się nie zgadzają'); return }
+      // Zapisz nick i hash do localStorage
+      localStorage.setItem('paf_nick', nick.trim())
+      localStorage.setItem('paf_pin_hash', inputHash)
+      setPinHash(inputHash)
     } else {
+      // Istniejący nick — sprawdź PIN
       const expectedHash = existingPreds[0].pin_hash
-      const inputHash = hashPin(nick.trim(), pin)
       if (inputHash !== expectedHash) { setLoginError('Błędny PIN'); return }
+      // Zapisz do localStorage
+      localStorage.setItem('paf_nick', nick.trim())
+      localStorage.setItem('paf_pin_hash', inputHash)
+      setPinHash(inputHash)
     }
-    localStorage.setItem('paf_nick', nick.trim())
-    setIsLoggedIn(true); setLoginError(''); setRegisterMode(false)
+
+    setIsLoggedIn(true)
+    setLoginError('')
+    setRegisterMode(false)
+    setPin('')
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('paf_nick')
+    localStorage.removeItem('paf_pin_hash')
+    setIsLoggedIn(false)
+    setNick('')
+    setPin('')
+    setPinHash('')
+    setRegisterMode(false)
+    setMyPredictions([])
   }
 
   async function submitPrediction(match) {
@@ -100,12 +133,19 @@ export default function Predictions() {
     const us = parseInt(temp.us); const them = parseInt(temp.them)
     if (isNaN(us) || isNaN(them) || us < 0 || them < 0) return
     setSaving(prev => ({ ...prev, [match.id]: true }))
-    const pin_hash = hashPin(nick.trim(), pin)
+
+    // Użyj zapisanego hasha zamiast pinu
+    const storedHash = pinHash || localStorage.getItem('paf_pin_hash')
     const existing = myPredictions.find(p => p.match_id === match.id)
+
     if (existing) {
       await supabase.from('predictions').update({ score_us: us, score_them: them }).eq('id', existing.id)
     } else {
-      await supabase.from('predictions').insert({ match_id: match.id, nick: nick.trim(), pin_hash, score_us: us, score_them: them, team: activeTeam })
+      await supabase.from('predictions').insert({
+        match_id: match.id, nick: nick.trim(),
+        pin_hash: storedHash,
+        score_us: us, score_them: them, team: activeTeam,
+      })
     }
     await load()
     setSuccessMsg(prev => ({ ...prev, [match.id]: true }))
@@ -132,8 +172,9 @@ export default function Predictions() {
             {registerMode ? '📝 Nowy nick — ustaw PIN' : '🎯 Zaloguj się żeby typować'}
           </div>
           <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)', marginBottom: 20 }}>
-            {registerMode ? `Nick "${nick}" jest nowy — ustaw PIN żeby go zabezpieczyć` : 'Wpisz nick i PIN. Nowy nick zostanie automatycznie zarejestrowany.'}
+            {registerMode ? `Nick "${nick}" jest nowy — ustaw PIN żeby go zabezpieczyć` : 'Wpisz nick i PIN. Zostaniesz zapamiętany na tym urządzeniu.'}
           </div>
+
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase', marginBottom: 6 }}>Nick</div>
             <input style={iStyle} value={nick} onChange={e => { setNick(e.target.value); setRegisterMode(false); setLoginError('') }}
@@ -141,6 +182,7 @@ export default function Predictions() {
               onFocus={e => e.target.style.borderColor = team.color}
               onBlur={e => e.target.style.borderColor = 'var(--black-border)'} />
           </div>
+
           <div style={{ marginBottom: registerMode ? 12 : 20 }}>
             <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase', marginBottom: 6 }}>PIN (min. 4 cyfry)</div>
             <input style={iStyle} type="password" value={pin} onChange={e => setPin(e.target.value)}
@@ -148,6 +190,7 @@ export default function Predictions() {
               onFocus={e => e.target.style.borderColor = team.color}
               onBlur={e => e.target.style.borderColor = 'var(--black-border)'} />
           </div>
+
           {registerMode && (
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 11, letterSpacing: 2, color: 'var(--white-muted)', textTransform: 'uppercase', marginBottom: 6 }}>Potwierdź PIN</div>
@@ -157,7 +200,9 @@ export default function Predictions() {
                 onBlur={e => e.target.style.borderColor = 'var(--black-border)'} />
             </div>
           )}
+
           {loginError && <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--red-light)', marginBottom: 16 }}>⚠️ {loginError}</div>}
+
           <button onClick={handleLogin} style={{ background: team.color, color: 'var(--white)', border: 'none', fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 14, letterSpacing: 1, textTransform: 'uppercase', padding: '12px 24px', cursor: 'pointer', width: '100%' }}>
             {registerMode ? 'Zarejestruj i typuj!' : 'Wejdź i typuj!'}
           </button>
@@ -172,8 +217,10 @@ export default function Predictions() {
           <span style={{ fontFamily: 'var(--font-condensed)', fontSize: 13, color: 'var(--white-muted)' }}>
             {myPredictions.length} {myPredictions.length === 1 ? 'typ' : myPredictions.length < 5 ? 'typy' : 'typów'} • {ranking.find(r => r.nick.toLowerCase() === nick.toLowerCase())?.points || 0} pkt
           </span>
-          <button onClick={() => { setIsLoggedIn(false); setPin(''); setRegisterMode(false) }}
-            style={{ marginLeft: 'auto', background: 'transparent', border: '1px solid #333', color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>
+          <div style={{ marginLeft: 'auto', fontFamily: 'var(--font-condensed)', fontSize: 11, color: 'var(--white-muted)', letterSpacing: 1 }}>
+            ✓ Zapamiętany na tym urządzeniu
+          </div>
+          <button onClick={handleLogout} style={{ background: 'transparent', border: '1px solid #333', color: 'var(--white-muted)', fontFamily: 'var(--font-condensed)', fontSize: 12, padding: '4px 10px', cursor: 'pointer' }}>
             Wyloguj
           </button>
         </div>
