@@ -1,45 +1,48 @@
-import { Routes, Route } from 'react-router-dom'
-import Navbar from './components/Navbar.jsx'
-import TeamSwitcher from './components/TeamSwitcher.jsx'
-import Home from './pages/Home.jsx'
-import Schedule from './pages/Schedule.jsx'
-import MatchDetail from './pages/MatchDetail.jsx'
-import Players from './pages/Players.jsx'
-import PlayerProfile from './pages/PlayerProfile.jsx'
-import Summary from './pages/Summary.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import Backup from './pages/Backup.jsx'
-import Table from './pages/Table.jsx'
-import History from './pages/History.jsx'
-import Interviews from './pages/Interviews.jsx'
-import Predictions from './pages/Predictions.jsx'
-import NotFound from './pages/NotFound.jsx'
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { TeamProvider } from './context/TeamContext';
+import Navbar from './components/Navbar';
+import TeamSwitcher from './components/TeamSwitcher';
+import Home from './pages/Home';
+import Schedule from './pages/Schedule';
+import MatchDetail from './pages/MatchDetail';
+import Players from './pages/Players';
+import PlayerProfile from './pages/PlayerProfile';
+import Table from './pages/Table';
+import Summary from './pages/Summary';
+import History from './pages/History';
+import LoginPage from './pages/LoginPage';
+import Backup from './pages/Backup';
+import Interviews from './pages/Interviews';
+import Predictions from './pages/Predictions';
+import PlayerOfMonth from './pages/PlayerOfMonth';
+import NotFound from './pages/NotFound';
 
 export default function App() {
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <TeamSwitcher />
-      <Navbar />
-      <main style={{ flex: 1 }}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/terminarz" element={<Schedule />} />
-          <Route path="/mecz/:id" element={<MatchDetail />} />
-          <Route path="/zawodnicy" element={<Players />} />
-          <Route path="/zawodnik/:id" element={<PlayerProfile />} />
-          <Route path="/tabela" element={<Table />} />
-          <Route path="/podsumowanie" element={<Summary />} />
-          <Route path="/historia" element={<History />} />
-          <Route path="/wywiady" element={<Interviews />} />
-          <Route path="/typowanie" element={<Predictions />} />
-          <Route path="/admin" element={<LoginPage />} />
-          <Route path="/backup" element={<Backup />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </main>
-      <footer style={{ borderTop: '1px solid #2a2a2a', padding: '20px', textAlign: 'center', color: '#555', fontFamily: 'var(--font-condensed)', fontSize: '13px', letterSpacing: '1px' }}>
-        FANPAGE PAF PŁOŃSK © {new Date().getFullYear()}
-      </footer>
-    </div>
-  )
+    <AuthProvider>
+      <TeamProvider>
+        <BrowserRouter>
+          <TeamSwitcher />
+          <Navbar />
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/terminarz" element={<Schedule />} />
+            <Route path="/mecz/:id" element={<MatchDetail />} />
+            <Route path="/zawodnicy" element={<Players />} />
+            <Route path="/zawodnik/:id" element={<PlayerProfile />} />
+            <Route path="/tabela" element={<Table />} />
+            <Route path="/podsumowanie" element={<Summary />} />
+            <Route path="/historia" element={<History />} />
+            <Route path="/wywiady" element={<Interviews />} />
+            <Route path="/typowanie" element={<Predictions />} />
+            <Route path="/pilkarz-miesiaca" element={<PlayerOfMonth />} />
+            <Route path="/admin" element={<LoginPage />} />
+            <Route path="/backup" element={<Backup />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TeamProvider>
+    </AuthProvider>
+  );
 }
