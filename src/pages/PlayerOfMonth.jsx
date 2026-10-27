@@ -4,15 +4,16 @@ import { useTeam } from '../context/TeamContext';
 import { useAuth } from '../context/AuthContext';
 
 export default function PlayerOfMonth() {
-  const { activeTeam, teamColor } = useTeam();
+  const { activeTeam, team } = useTeam();
+  const teamColor = team.color;
   const { isAdmin } = useAuth();
 
   const [polls, setPolls] = useState([]);
   const [activePoll, setActivePoll] = useState(null);
-  const [votes, setVotes] = useState({}); // pollId -> { playerName: count }
+  const [votes, setVotes] = useState({});
   const [loading, setLoading] = useState(true);
   const [votedToday, setVotedToday] = useState(false);
-  const [myVote, setMyVote] = useState(null); // player name voted this poll
+  const [myVote, setMyVote] = useState(null);
 
   // Admin form
   const [showForm, setShowForm] = useState(false);
@@ -39,7 +40,6 @@ export default function PlayerOfMonth() {
       const open = data.find(p => p.is_open);
       setActivePoll(open || null);
 
-      // Load votes for all closed polls + active (for admin)
       const ids = data.map(p => p.id);
       if (ids.length > 0) {
         const { data: vData } = await supabase
@@ -56,19 +56,23 @@ export default function PlayerOfMonth() {
         }
       }
 
-      // Check localStorage for today's vote on open poll
       if (open) {
-        const stored = localStorage.getItem(`pom_vote_${open.id}`);
-        if (stored) {
-          const { date, player } = JSON.parse(stored);
-          if (date === today) {
-            setVotedToday(true);
-            setMyVote(player);
+        try {
+          const stored = localStorage.getItem(`pom_vote_${open.id}`);
+          if (stored) {
+            const { date, player } = JSON.parse(stored);
+            if (date === today) {
+              setVotedToday(true);
+              setMyVote(player);
+            } else {
+              setVotedToday(false);
+              setMyVote(null);
+            }
           } else {
             setVotedToday(false);
             setMyVote(null);
           }
-        } else {
+        } catch (e) {
           setVotedToday(false);
           setMyVote(null);
         }
@@ -83,10 +87,11 @@ export default function PlayerOfMonth() {
       .from('player_of_month_votes')
       .insert({ poll_id: activePoll.id, player_name: playerName });
     if (!error) {
-      localStorage.setItem(`pom_vote_${activePoll.id}`, JSON.stringify({ date: today, player: playerName }));
+      try {
+        localStorage.setItem(`pom_vote_${activePoll.id}`, JSON.stringify({ date: today, player: playerName }));
+      } catch (e) {}
       setVotedToday(true);
       setMyVote(playerName);
-      // Update local count
       setVotes(prev => {
         const pollVotes = { ...(prev[activePoll.id] || {}) };
         pollVotes[playerName] = (pollVotes[playerName] || 0) + 1;
@@ -180,7 +185,6 @@ export default function PlayerOfMonth() {
   }
 
   const closedPolls = polls.filter(p => !p.is_open);
-  const archivePoll = selectedArchive ? polls.find(p => p.id === selectedArchive) : null;
 
   if (loading) return (
     <div style={{ maxWidth: 600, margin: '40px auto', padding: '0 16px', textAlign: 'center', color: '#888' }}>
@@ -226,7 +230,7 @@ export default function PlayerOfMonth() {
               <textarea
                 value={playersInput}
                 onChange={e => setPlayersInput(e.target.value)}
-                placeholder={"Zawodnicy (każdy w nowej linii):\nJan Kowalski\nPiotr Nowak\nMarcin Wiśniewski"}
+                placeholder={'Zawodnicy (każdy w nowej linii):\nJan Kowalski\nPiotr Nowak\nMarcin Wiśniewski'}
                 rows={5}
                 style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: '#111', border: '1px solid #333', borderRadius: 8, color: '#fff', fontSize: 14, resize: 'vertical', marginBottom: 12 }}
               />
@@ -293,7 +297,6 @@ export default function PlayerOfMonth() {
                       fontSize: 15,
                       cursor: 'pointer',
                       textAlign: 'left',
-                      transition: 'background 0.15s, border-color 0.15s',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 10
@@ -349,12 +352,11 @@ export default function PlayerOfMonth() {
                   >
                     <div style={{ textAlign: 'left' }}>
                       <div style={{ fontWeight: 600 }}>{poll.month_label}</div>
-                      {winner && max > 0 && (
+                      {winner && max > 0 ? (
                         <div style={{ color: '#F1C40F', fontSize: 13, marginTop: 2 }}>
                           🏆 {winner} · {total} głos{total === 1 ? '' : total < 5 ? 'y' : 'ów'}
                         </div>
-                      )}
-                      {(!winner || max === 0) && (
+                      ) : (
                         <div style={{ color: '#555', fontSize: 13 }}>Brak głosów</div>
                       )}
                     </div>
