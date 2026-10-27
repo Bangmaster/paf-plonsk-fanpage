@@ -1,88 +1,132 @@
-import { Link, useLocation } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext.jsx'
-import { useTeam } from '../context/TeamContext.jsx'
-import { useState } from 'react'
-import PixelPlayer from './PixelPlayer.jsx'
+import { NavLink, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { useTeam } from '../context/TeamContext';
+import PixelPlayer from './PixelPlayer';
+
+const NAV_LINKS = [
+  { path: '/', label: '🏠 Dom' },
+  { path: '/terminarz', label: '📅 Terminarz' },
+  { path: '/zawodnicy', label: '👥 Zawodnicy' },
+  { path: '/tabela', label: '📊 Tabela' },
+  { path: '/podsumowanie', label: '📋 Podsumowanie' },
+  { path: '/historia', label: '🏆 Historia' },
+  { path: '/wywiady', label: '🎙️ Wywiady' },
+  { path: '/typowanie', label: '🎯 Typowanie' },
+  { path: '/pilkarz-miesiaca', label: '⭐ Piłkarz' },
+  { path: '/admin', label: '🔐 Admin' },
+];
 
 export default function Navbar() {
-  const location = useLocation()
-  const { isAdmin, logout } = useAuth()
-  const { team } = useTeam()
-  const [menuOpen, setMenuOpen] = useState(false)
+  const { teamColor } = useTeam();
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
 
-  const publicLinks = [
-    { to: '/', label: 'Główna' },
-    { to: '/terminarz', label: 'Terminarz' },
-    { to: '/tabela', label: 'Tabela' },
-    { to: '/zawodnicy', label: 'Zawodnicy' },
-    { to: '/podsumowanie', label: 'Podsumowanie' },
-    { to: '/historia', label: 'Historia' },
-    { to: '/wywiady', label: 'Wywiady' },
-    { to: '/typowanie', label: '🎯 Typuj' },
-  ]
+  const linkStyle = (isActive) => ({
+    display: 'block',
+    padding: '10px 16px',
+    color: isActive ? teamColor : '#ccc',
+    textDecoration: 'none',
+    fontWeight: isActive ? 700 : 400,
+    borderBottom: isActive ? `2px solid ${teamColor}` : '2px solid transparent',
+    fontSize: 14,
+    whiteSpace: 'nowrap',
+    transition: 'color 0.15s',
+  });
 
-  const adminLinks = [
-    { to: '/admin', label: 'Panel' },
-    { to: '/backup', label: 'Backup' },
-  ]
-
-  const links = isAdmin ? [...publicLinks, ...adminLinks] : publicLinks
+  const mobileLinkStyle = (isActive) => ({
+    display: 'block',
+    padding: '12px 20px',
+    color: isActive ? teamColor : '#ccc',
+    textDecoration: 'none',
+    fontWeight: isActive ? 700 : 400,
+    borderLeft: isActive ? `3px solid ${teamColor}` : '3px solid transparent',
+    fontSize: 15,
+    background: isActive ? `${teamColor}10` : 'transparent',
+  });
 
   return (
-    <nav style={{ background: 'var(--black-soft)', borderBottom: `3px solid ${team.color}`, position: 'sticky', top: 0, zIndex: 100, transition: 'border-color 0.3s' }}>
-      <PixelPlayer />
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64, position: 'relative', zIndex: 2 }}>
-        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
-          <img src="/logo.png" alt="PAF Płońsk" style={{ height: 44, width: 'auto' }} />
-          <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: 2, color: 'var(--white)', lineHeight: 1 }}>PAF Płońsk</div>
-            <div style={{ fontFamily: 'var(--font-condensed)', fontSize: 10, letterSpacing: 3, color: team.color, textTransform: 'uppercase', transition: 'color 0.3s' }}>{team.short} — Fanpage</div>
-          </div>
-        </Link>
+    <nav style={{
+      background: '#111',
+      borderBottom: `2px solid ${teamColor}`,
+      position: 'sticky',
+      top: 0,
+      zIndex: 100,
+    }}>
+      <div style={{
+        maxWidth: 900,
+        margin: '0 auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 16px',
+      }}>
+        {/* Logo */}
+        <NavLink to="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+          <PixelPlayer color={teamColor} />
+          <span style={{ color: teamColor, fontWeight: 800, fontSize: 15, letterSpacing: 1 }}>
+            PAF Płońsk
+          </span>
+        </NavLink>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }} className="desktop-nav">
-          {links.map(link => (
-            <Link key={link.to} to={link.to} style={{
-              fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 12,
-              letterSpacing: 1, textTransform: 'uppercase', padding: '8px 9px',
-              color: location.pathname === link.to ? team.color : 'var(--white-dim)',
-              borderBottom: location.pathname === link.to ? `2px solid ${team.color}` : '2px solid transparent',
-              transition: 'all 0.2s', textDecoration: 'none',
-            }}>{link.label}</Link>
+        {/* Desktop links */}
+        <div style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', gap: 0 }}
+          className="desktop-nav">
+          {NAV_LINKS.map(link => (
+            <NavLink
+              key={link.path}
+              to={link.path}
+              end={link.path === '/'}
+              style={({ isActive }) => linkStyle(isActive)}
+            >
+              {link.label}
+            </NavLink>
           ))}
-          {isAdmin ? (
-            <button onClick={logout} style={{ marginLeft: 6, background: 'transparent', border: '1px solid var(--red)', color: 'var(--red-light)', fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', padding: '5px 10px', cursor: 'pointer' }}>Wyloguj</button>
-          ) : (
-            <Link to="/admin" style={{ marginLeft: 6, background: 'var(--red)', color: 'var(--white)', fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', padding: '5px 10px', textDecoration: 'none' }}>Admin</Link>
-          )}
         </div>
 
-        <button onClick={() => setMenuOpen(!menuOpen)} style={{ display: 'none', background: 'none', border: 'none', color: 'var(--white)', fontSize: 24, cursor: 'pointer', padding: 4 }} className="mobile-menu-btn">
-          {menuOpen ? '✕' : '☰'}
+        {/* Hamburger */}
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="hamburger"
+          style={{
+            background: 'none',
+            border: 'none',
+            color: teamColor,
+            fontSize: 24,
+            cursor: 'pointer',
+            padding: '8px 0',
+            display: 'none',
+          }}
+        >
+          {open ? '✕' : '☰'}
         </button>
       </div>
 
-      {menuOpen && (
-        <div style={{ background: 'var(--black-card)', borderTop: '1px solid var(--black-border)', padding: '12px 20px' }}>
-          {links.map(link => (
-            <Link key={link.to} to={link.to} onClick={() => setMenuOpen(false)} style={{ display: 'block', fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 15, letterSpacing: 1.5, textTransform: 'uppercase', padding: '12px 0', color: location.pathname === link.to ? team.color : 'var(--white-dim)', borderBottom: '1px solid var(--black-border)', textDecoration: 'none' }}>
+      {/* Mobile menu */}
+      {open && (
+        <div style={{ background: '#111', borderTop: `1px solid ${teamColor}30` }} className="mobile-menu">
+          {NAV_LINKS.map(link => (
+            <NavLink
+              key={link.path}
+              to={link.path}
+              end={link.path === '/'}
+              style={({ isActive }) => mobileLinkStyle(isActive)}
+              onClick={() => setOpen(false)}
+            >
               {link.label}
-            </Link>
+            </NavLink>
           ))}
-          {isAdmin ? (
-            <button onClick={() => { logout(); setMenuOpen(false) }} style={{ display: 'block', marginTop: 12, background: 'transparent', border: '1px solid var(--red)', color: 'var(--red-light)', fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 14, letterSpacing: 1, textTransform: 'uppercase', padding: '8px 14px', cursor: 'pointer', width: '100%' }}>Wyloguj</button>
-          ) : (
-            <Link to="/admin" onClick={() => setMenuOpen(false)} style={{ display: 'block', marginTop: 12, background: 'var(--red)', color: 'var(--white)', fontFamily: 'var(--font-condensed)', fontWeight: 700, fontSize: 14, letterSpacing: 1, textTransform: 'uppercase', padding: '8px 14px', textAlign: 'center', textDecoration: 'none' }}>Admin</Link>
-          )}
         </div>
       )}
 
       <style>{`
-        @media (max-width: 1050px) {
+        @media (max-width: 768px) {
           .desktop-nav { display: none !important; }
-          .mobile-menu-btn { display: block !important; }
+          .hamburger { display: block !important; }
+        }
+        @media (min-width: 769px) {
+          .mobile-menu { display: none !important; }
         }
       `}</style>
     </nav>
-  )
+  );
 }
