@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useState } from 'react';
 import { useTeam } from '../context/TeamContext';
 import PixelPlayer from './PixelPlayer';
@@ -17,9 +17,9 @@ const NAV_LINKS = [
 ];
 
 export default function Navbar() {
-  const { teamColor } = useTeam();
+  const { team } = useTeam();
+  const teamColor = team.color;
   const [open, setOpen] = useState(false);
-  const location = useLocation();
 
   const linkStyle = (isActive) => ({
     display: 'block',
