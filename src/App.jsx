@@ -1,6 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
-import { TeamProvider } from './context/TeamContext';
+import { Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import TeamSwitcher from './components/TeamSwitcher';
 import Home from './pages/Home';
@@ -20,29 +18,25 @@ import NotFound from './pages/NotFound';
 
 export default function App() {
   return (
-    <AuthProvider>
-      <TeamProvider>
-        <BrowserRouter>
-          <TeamSwitcher />
-          <Navbar />
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/terminarz" element={<Schedule />} />
-            <Route path="/mecz/:id" element={<MatchDetail />} />
-            <Route path="/zawodnicy" element={<Players />} />
-            <Route path="/zawodnik/:id" element={<PlayerProfile />} />
-            <Route path="/tabela" element={<Table />} />
-            <Route path="/podsumowanie" element={<Summary />} />
-            <Route path="/historia" element={<History />} />
-            <Route path="/wywiady" element={<Interviews />} />
-            <Route path="/typowanie" element={<Predictions />} />
-            <Route path="/pilkarz-miesiaca" element={<PlayerOfMonth />} />
-            <Route path="/admin" element={<LoginPage />} />
-            <Route path="/backup" element={<Backup />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TeamProvider>
-    </AuthProvider>
+    <>
+      <TeamSwitcher />
+      <Navbar />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/terminarz" element={<Schedule />} />
+        <Route path="/mecz/:id" element={<MatchDetail />} />
+        <Route path="/zawodnicy" element={<Players />} />
+        <Route path="/zawodnik/:id" element={<PlayerProfile />} />
+        <Route path="/tabela" element={<Table />} />
+        <Route path="/podsumowanie" element={<Summary />} />
+        <Route path="/historia" element={<History />} />
+        <Route path="/wywiady" element={<Interviews />} />
+        <Route path="/typowanie" element={<Predictions />} />
+        <Route path="/pilkarz-miesiaca" element={<PlayerOfMonth />} />
+        <Route path="/admin" element={<LoginPage />} />
+        <Route path="/backup" element={<Backup />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </>
   );
 }
